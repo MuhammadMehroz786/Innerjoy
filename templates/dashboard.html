@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inner Joy Studio - WhatsApp Automation Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Inner Joy Studio</h1>
+            <p class="subtitle">WhatsApp Automation Dashboard</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Contacts</h3>
+                <div class="stat-value" id="total-contacts">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>With Timeslot</h3>
+                <div class="stat-value" id="with-timeslot">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Without Timeslot</h3>
+                <div class="stat-value" id="without-timeslot">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Members</h3>
+                <div class="stat-value" id="members">-</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Timeslot Distribution</h2>
+            <div class="timeslot-grid">
+                <div class="timeslot-card">
+                    <div class="timeslot-label">A - Sat 15:30</div>
+                    <div class="timeslot-count" id="slot-a">0</div>
+                </div>
+                <div class="timeslot-card">
+                    <div class="timeslot-label">B - Sat 20:30</div>
+                    <div class="timeslot-count" id="slot-b">0</div>
+                </div>
+                <div class="timeslot-card">
+                    <div class="timeslot-label">C - Sun 06:30</div>
+                    <div class="timeslot-count" id="slot-c">0</div>
+                </div>
+                <div class="timeslot-card">
+                    <div class="timeslot-label">D - Sun 15:30</div>
+                    <div class="timeslot-count" id="slot-d">0</div>
+                </div>
+                <div class="timeslot-card">
+                    <div class="timeslot-label">E - Sun 20:30</div>
+                    <div class="timeslot-count" id="slot-e">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Quick Actions</h2>
+            <div class="actions-grid">
+                <button class="btn btn-primary" onclick="refreshStats()">Refresh Stats</button>
+                <button class="btn btn-primary" onclick="triggerReminders()">Trigger Reminder Check</button>
+                <button class="btn btn-secondary" onclick="viewContacts()">View All Contacts</button>
+                <button class="btn btn-secondary" onclick="showTestMessage()">Send Test Message</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Recent Contacts</h2>
+            <div id="contacts-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Timeslot</th>
+                            <th>Session Time</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contacts-tbody">
+                        <tr>
+                            <td colspan="5" style="text-align: center;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Activity Log</h2>
+            <div id="activity-log">
+                <div class="log-entry">System initialized</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Message Modal -->
+    <div id="test-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeTestModal()">&times;</span>
+            <h2>Send Test Message</h2>
+            <form id="test-form">
+                <div class="form-group">
+                    <label for="contact-id">Contact ID:</label>
+                    <input type="text" id="contact-id" required>
+                </div>
+                <div class="form-group">
+                    <label for="message">Message:</label>
+                    <textarea id="message" rows="4" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load stats on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            refreshStats();
+            loadContacts();
+        });
+
+        // Refresh stats
+        async function refreshStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+
+                document.getElementById('total-contacts').textContent = data.total_contacts;
+                document.getElementById('with-timeslot').textContent = data.with_timeslot;
+                document.getElementById('without-timeslot').textContent = data.without_timeslot;
+                document.getElementById('members').textContent = data.members;
+
+                // Update timeslot distribution
+                document.getElementById('slot-a').textContent = data.timeslot_distribution.A || 0;
+                document.getElementById('slot-b').textContent = data.timeslot_distribution.B || 0;
+                document.getElementById('slot-c').textContent = data.timeslot_distribution.C || 0;
+                document.getElementById('slot-d').textContent = data.timeslot_distribution.D || 0;
+                document.getElementById('slot-e').textContent = data.timeslot_distribution.E || 0;
+
+                addLogEntry('Stats refreshed successfully');
+            } catch (error) {
+                console.error('Error refreshing stats:', error);
+                addLogEntry('Error refreshing stats: ' + error.message);
+            }
+        }
+
+        // Load contacts
+        async function loadContacts() {
+            try {
+                const response = await fetch('/api/contacts');
+                const data = await response.json();
+
+                const tbody = document.getElementById('contacts-tbody');
+                tbody.innerHTML = '';
+
+                if (data.contacts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No contacts yet</td></tr>';
+                    return;
+                }
+
+                // Show last 10 contacts
+                const recentContacts = data.contacts.slice(-10).reverse();
+
+                recentContacts.forEach(contact => {
+                    const row = document.createElement('tr');
+
+                    const sessionTime = contact.session_datetime
+                        ? new Date(contact.session_datetime).toLocaleString()
+                        : '-';
+
+                    row.innerHTML = `
+                        <td>${contact.first_name || 'Unknown'}</td>
+                        <td>${contact.chosen_timeslot || '-'}</td>
+                        <td>${sessionTime}</td>
+                        <td><span class="status-badge ${contact.member_status}">${contact.member_status}</span></td>
+                        <td>
+                            <button class="btn-small" onclick="viewContact('${contact.contact_id}')">View</button>
+                        </td>
+                    `;
+
+                    tbody.appendChild(row);
+                });
+
+                addLogEntry(`Loaded ${data.contacts.length} contacts`);
+            } catch (error) {
+                console.error('Error loading contacts:', error);
+                addLogEntry('Error loading contacts: ' + error.message);
+            }
+        }
+
+        // Trigger reminders
+        async function triggerReminders() {
+            try {
+                const response = await fetch('/api/trigger-reminder', { method: 'POST' });
+                const data = await response.json();
+
+                addLogEntry('Reminder check triggered');
+                alert('Reminder check triggered successfully!');
+            } catch (error) {
+                console.error('Error triggering reminders:', error);
+                addLogEntry('Error triggering reminders: ' + error.message);
+                alert('Error triggering reminders');
+            }
+        }
+
+        // View all contacts
+        function viewContacts() {
+            window.location.href = '/api/contacts';
+        }
+
+        // View specific contact
+        async function viewContact(contactId) {
+            try {
+                const response = await fetch(`/api/contact/${contactId}`);
+                const data = await response.json();
+
+                alert(JSON.stringify(data, null, 2));
+            } catch (error) {
+                console.error('Error viewing contact:', error);
+                alert('Error loading contact details');
+            }
+        }
+
+        // Show test message modal
+        function showTestMessage() {
+            document.getElementById('test-modal').style.display = 'block';
+        }
+
+        // Close test modal
+        function closeTestModal() {
+            document.getElementById('test-modal').style.display = 'none';
+        }
+
+        // Handle test form submission
+        document.getElementById('test-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const contactId = document.getElementById('contact-id').value;
+            const message = document.getElementById('message').value;
+
+            try {
+                const response = await fetch('/api/send-test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contact_id: contactId,
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Message sent successfully!');
+                    closeTestModal();
+                    addLogEntry(`Test message sent to ${contactId}`);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error sending test message:', error);
+                alert('Error sending message');
+            }
+        });
+
+        // Add log entry
+        function addLogEntry(message) {
+            const logDiv = document.getElementById('activity-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.insertBefore(entry, logDiv.firstChild);
+
+            // Keep only last 20 entries
+            while (logDiv.children.length > 20) {
+                logDiv.removeChild(logDiv.lastChild);
+            }
+        }
+
+        // Auto-refresh stats every 30 seconds
+        setInterval(refreshStats, 30000);
+    </script>
+</body>
+</html>
