@@ -5,6 +5,9 @@ Handles data logging and tracking in Google Sheets using Service Account
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+import json
+import base64
+import os
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -34,11 +37,27 @@ class GoogleSheetsService:
             # Define the required scopes
             scopes = ['https://www.googleapis.com/auth/spreadsheets']
 
-            # Load credentials from service account file
-            creds = Credentials.from_service_account_file(
-                Config.GOOGLE_CREDENTIALS_FILE,
-                scopes=scopes
-            )
+            # Check if credentials are provided as base64 environment variable (Railway)
+            google_service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+
+            if google_service_account_json:
+                # Decode base64 and load JSON credentials
+                logger.info("Loading credentials from GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
+                try:
+                    decoded_json = base64.b64decode(google_service_account_json).decode('utf-8')
+                    credentials_info = json.loads(decoded_json)
+                    creds = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+                    logger.info("Successfully loaded credentials from base64 environment variable")
+                except Exception as e:
+                    logger.error(f"Failed to decode base64 credentials: {e}")
+                    raise GoogleSheetsError(f"Failed to decode base64 credentials: {e}")
+            else:
+                # Fall back to file-based credentials (local development)
+                logger.info(f"Loading credentials from file: {Config.GOOGLE_CREDENTIALS_FILE}")
+                creds = Credentials.from_service_account_file(
+                    Config.GOOGLE_CREDENTIALS_FILE,
+                    scopes=scopes
+                )
 
             # Authorize the client
             self.client = gspread.authorize(creds)
