@@ -258,9 +258,9 @@ class RespondAPI:
             logger.error(f"Failed to get field '{field_name}' for contact {contact_id}: {e}")
             return None
 
-    def check_24hr_window(self, contact_id: str) -> bool:
+    def check_72hr_window(self, contact_id: str) -> bool:
         """
-        Check if contact is within 24-hour messaging window
+        Check if contact is within 72-hour messaging window (Meta WhatsApp Policy)
 
         Args:
             contact_id: Respond.io contact ID
@@ -270,22 +270,22 @@ class RespondAPI:
         """
         last_window_start = self.get_contact_field(
             contact_id,
-            Config.CUSTOM_FIELDS['LAST_24HR_WINDOW']
+            Config.CUSTOM_FIELDS['LAST_72HR_WINDOW']
         )
 
         if not last_window_start:
-            logger.warning(f"No 24hr window timestamp for contact {contact_id}")
+            logger.warning(f"No 72hr window timestamp for contact {contact_id}")
             return False
 
         try:
             window_start = datetime.fromisoformat(last_window_start)
             time_elapsed = (datetime.now() - window_start).total_seconds()
 
-            within_window = time_elapsed < Config.WINDOW_24H_SECONDS
+            within_window = time_elapsed < Config.WINDOW_72H_SECONDS
 
             if not within_window:
                 logger.warning(
-                    f"Contact {contact_id} is outside 24hr window "
+                    f"Contact {contact_id} is outside 72hr window "
                     f"(elapsed: {time_elapsed/3600:.2f} hours)"
                 )
 
@@ -295,9 +295,23 @@ class RespondAPI:
             logger.error(f"Error parsing window timestamp for contact {contact_id}: {e}")
             return False
 
-    def update_24hr_window(self, contact_id: str) -> Dict:
+    def check_24hr_window(self, contact_id: str) -> bool:
         """
-        Update the 24-hour window timestamp for a contact
+        [LEGACY] Check if contact is within 24-hour messaging window
+        Kept for backwards compatibility - use check_72hr_window() instead
+
+        Args:
+            contact_id: Respond.io contact ID
+
+        Returns:
+            True if within window, False otherwise
+        """
+        # Just call the 72hr version now
+        return self.check_72hr_window(contact_id)
+
+    def update_72hr_window(self, contact_id: str) -> Dict:
+        """
+        Update the 72-hour window timestamp for a contact (Meta WhatsApp Policy)
         Called when contact sends a message
 
         Args:
@@ -307,17 +321,32 @@ class RespondAPI:
             Updated contact information
         """
         timestamp = datetime.now().isoformat()
-        logger.info(f"Updating 24hr window for contact {contact_id} to {timestamp}")
+        logger.info(f"Updating 72hr window for contact {contact_id} to {timestamp}")
 
         return self.update_contact_field(
             contact_id,
-            Config.CUSTOM_FIELDS['LAST_24HR_WINDOW'],
+            Config.CUSTOM_FIELDS['LAST_72HR_WINDOW'],
             timestamp
         )
 
+    def update_24hr_window(self, contact_id: str) -> Dict:
+        """
+        [LEGACY] Update the 24-hour window timestamp for a contact
+        Kept for backwards compatibility - use update_72hr_window() instead
+        Called when contact sends a message
+
+        Args:
+            contact_id: Respond.io contact ID
+
+        Returns:
+            Updated contact information
+        """
+        # Just call the 72hr version now
+        return self.update_72hr_window(contact_id)
+
     def send_message_with_window_check(self, contact_id: str, message: str) -> bool:
         """
-        Send message only if within 24-hour window
+        Send message only if within 72-hour window
 
         Args:
             contact_id: Respond.io contact ID
@@ -326,8 +355,8 @@ class RespondAPI:
         Returns:
             True if message sent successfully, False otherwise
         """
-        if not self.check_24hr_window(contact_id):
-            logger.error(f"Cannot send message to {contact_id}: outside 24hr window")
+        if not self.check_72hr_window(contact_id):
+            logger.error(f"Cannot send message to {contact_id}: outside 72hr window")
             return False
 
         try:

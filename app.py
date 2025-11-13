@@ -70,15 +70,33 @@ def health():
 @app.route('/webhook/respond', methods=['POST'])
 def webhook_respond():
     """
-    Webhook endpoint for Respond.io
-    Receives incoming WhatsApp messages
+    Webhook endpoint for Make.com → Flask
+    Receives incoming WhatsApp messages from Make.com
+
+    Expected format from Make.com:
+    {
+        "event_type": "message.received",
+        "Contact": {
+            "Contact ID": "339593905",
+            "First Name": "Mehroz",
+            "Phone No.": "+923273626526",
+            ...
+        },
+        "Message": {
+            "Message": {
+                "Type": "text",
+                "Text": "hey"
+            },
+            ...
+        }
+    }
     """
     try:
         # Log raw data for debugging
         raw_data = request.get_data(as_text=True)
-        logger.info(f"Raw webhook data (FULL): {raw_data}")  # Log ALL data
+        logger.info(f"Raw webhook data from Make.com: {raw_data}")
 
-        # Try to parse JSON with fallback
+        # Try to parse JSON
         try:
             data = request.get_json(force=True)
         except Exception as json_error:
@@ -91,27 +109,20 @@ def webhook_respond():
             logger.warning("Received empty webhook data")
             return jsonify({'error': 'No data received'}), 400
 
-        logger.info(f"Parsed webhook data (FULL): {data}")
-        logger.info(f"All keys in data: {list(data.keys())}")
-        if 'contact' in data:
-            logger.info(f"All contact keys: {list(data['contact'].keys())}")
-        if 'message' in data:
-            logger.info(f"All message keys: {list(data['message'].keys())}")
+        logger.info(f"Parsed webhook data from Make.com: {data}")
 
-        # Verify webhook secret if configured
-        if Config.WEBHOOK_SECRET:
-            signature = request.headers.get('X-Webhook-Signature')
-            # Add signature verification logic here if needed
-
-        # Extract event type
-        event_type = data.get('event')
+        # Extract event type (Make.com format uses "event_type")
+        event_type = data.get('event_type', data.get('event'))
 
         if event_type == 'message.received':
+            # Transform Make.com format to internal format
+            transformed_data = _transform_makecom_to_internal(data)
+
             # Process incoming message
-            success = message_handler.process_message(data)
+            success = message_handler.process_message(transformed_data)
 
             if success:
-                return jsonify({'status': 'processed'}), 200
+                return jsonify({'status': 'processed', 'message': 'Message processed successfully'}), 200
             else:
                 return jsonify({'status': 'error', 'message': 'Failed to process'}), 500
 
@@ -122,6 +133,55 @@ def webhook_respond():
     except Exception as e:
         logger.error(f"Error processing webhook: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+def _transform_makecom_to_internal(make_data: dict) -> dict:
+    """
+    Transform Make.com webhook format to internal message handler format
+
+    Args:
+        make_data: Data from Make.com
+
+    Returns:
+        Transformed data for message_handler
+    """
+    try:
+        # Extract contact info
+        contact_info = make_data.get('Contact', {})
+        contact_id = contact_info.get('Contact ID', '')
+        first_name = contact_info.get('First Name', '')
+        phone = contact_info.get('Phone No.', '')
+
+        # Extract message info
+        message_info = make_data.get('Message', {})
+        message_content = message_info.get('Message', {})
+        message_text = message_content.get('Text', '')
+        message_type = message_content.get('Type', 'text')
+
+        # Transform to internal format
+        internal_format = {
+            'event': 'message.received',
+            'contact': {
+                'id': contact_id,
+                'phone': phone,
+                'firstName': first_name,
+                'lastName': contact_info.get('Last Name', '')
+            },
+            'message': {
+                'id': message_info.get('ID', ''),
+                'type': message_type,
+                'text': message_text,
+                'timestamp': message_info.get('Timestamp', '')
+            },
+            'channel': make_data.get('Channel', {})
+        }
+
+        logger.info(f"Transformed Make.com data - Contact: {contact_id}, Phone: {phone}, Text: {message_text}")
+        return internal_format
+
+    except Exception as e:
+        logger.error(f"Error transforming Make.com data: {e}", exc_info=True)
+        raise
 
 
 @app.route('/api/send-test', methods=['POST'])
@@ -138,10 +198,10 @@ def send_test_message():
         if not contact_id or not message:
             return jsonify({'error': 'Missing contact_id or message'}), 400
 
-        # Check 24-hour window
-        if not api.check_24hr_window(contact_id):
+        # Check 72-hour window
+        if not api.check_72hr_window(contact_id):
             return jsonify({
-                'error': 'Contact is outside 24-hour messaging window'
+                'error': 'Contact is outside 72-hour messaging window'
             }), 400
 
         # Send message
@@ -371,7 +431,7 @@ def update_member_status():
                 member_zoom_link=Config.ZOOM_MEMBER_LINK
             )
 
-            if api.check_24hr_window(contact_id):
+            if api.check_72hr_window(contact_id):
                 api.send_message(contact_id, welcome_message)
 
         return jsonify({
