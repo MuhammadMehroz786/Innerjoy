@@ -157,40 +157,29 @@ class MessageHandler:
             True if handled successfully
         """
         try:
-            # Try to get first name from contact data (Make.com), otherwise extract from message
-            if contact_data and contact_data.get('firstName'):
-                first_name = contact_data.get('firstName')
-                logger.info(f"Using first name from contact data: {first_name}")
-            else:
-                # Extract first name from their message
-                first_name = self._extract_first_name(message_text)
-                logger.info(f"Extracted first name from message: {first_name}")
-
-            # Add to sheets
+            # Add to sheets with placeholder name
+            # We'll get their actual name in the next message
             now = datetime.now(self.timezone)
             self._safe_sheets_operation(
                 lambda: self.sheets.add_contact({
                     'contact_id': contact_identifier,
                     'phone': phone,
-                    'first_name': first_name,
+                    'first_name': 'Pending',  # Placeholder until they provide name
                     'current_tree': 'Tree1',
-                    'current_step': 'B1_Z2',  # Moving to Z2 after getting name
+                    'current_step': 'B1_Z1',  # Waiting for name
                     'registration_time': now.isoformat(),
                     'last_inbound_msg_time': now.isoformat(),
                     'window_expires_at': (now + timedelta(hours=72)).isoformat()  # 72-hour window
                 }) if self.sheets else None
             )
 
-            # Log message
-            self._log_message(contact_identifier, message_text, 'inbound', 'B1_Z1')
+            # Log their first message
+            self._log_message(contact_identifier, message_text, 'inbound', 'FIRST_CONTACT')
 
-            # Send B1 Z2 - Zoom link + ask timeslot
-            self._send_b1_z2(contact_identifier, first_name)
+            # Send B1 Z1 - Ask for name
+            self._send_b1_z1(contact_identifier)
 
-            # Schedule B2 Ra (fallback to Tree 2) in 2 hours if no timeslot chosen
-            self._schedule_tree2_fallback(contact_identifier, hours=2)
-
-            logger.info(f"New contact {contact_identifier} ({first_name}) added, sent B1_Z2")
+            logger.info(f"New contact {contact_identifier} added, sent B1_Z1 (asking for name)")
             return True
 
         except Exception as e:
@@ -237,6 +226,11 @@ class MessageHandler:
             current_step = sheet_contact.get('current_step', '')
             first_name = sheet_contact.get('first_name', 'there')
 
+            # Check if we're waiting for their name (B1_Z1 response)
+            if current_step == 'B1_Z1':
+                logger.info(f"Receiving name from {contact_identifier}")
+                return self._handle_name_response(contact_identifier, message_text)
+
             # Check if they sent thumbs up
             if message_text.strip() == '👍':
                 self._handle_thumbs_up(contact_identifier)
@@ -264,6 +258,65 @@ class MessageHandler:
             return False
 
     # ==================== TREE 1 FLOW - MESSAGE SENDING ====================
+
+    def _send_b1_z1(self, contact_identifier: str):
+        """
+        Send B1 Z1 - Ask for name
+
+        Args:
+            contact_identifier: Contact identifier
+        """
+        try:
+            message = self.templates['B1_Z1']
+
+            self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
+            self._log_message(contact_identifier, message, 'outbound', 'B1_Z1')
+
+            logger.info(f"Sent B1_Z1 to {contact_identifier} (asking for name)")
+
+        except Exception as e:
+            logger.error(f"Error sending B1_Z1: {e}")
+
+    def _handle_name_response(self, contact_identifier: str, message_text: str) -> bool:
+        """
+        Handle response to B1_Z1 (name question)
+        Extract name and send B1_Z2 with Zoom link
+
+        Args:
+            contact_identifier: Contact identifier
+            message_text: User's response (their name)
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            # Extract first name from their message
+            first_name = self._extract_first_name(message_text)
+            logger.info(f"Extracted name: {first_name}")
+
+            # Update contact in sheets
+            self._safe_sheets_operation(
+                lambda: self.sheets.update_contact(contact_identifier, {
+                    'first_name': first_name,
+                    'current_step': 'B1_Z2'
+                }) if self.sheets else None
+            )
+
+            # Log their name response
+            self._log_message(contact_identifier, message_text, 'inbound', 'NAME_RESPONSE')
+
+            # Send B1 Z2 - Zoom link + ask timeslot
+            self._send_b1_z2(contact_identifier, first_name)
+
+            # Schedule B2 Ra (fallback to Tree 2) in 2 hours if no timeslot chosen
+            self._schedule_tree2_fallback(contact_identifier, hours=2)
+
+            logger.info(f"Received name '{first_name}' from {contact_identifier}, sent B1_Z2")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling name response: {e}", exc_info=True)
+            return False
 
     def _send_b1_z2(self, contact_identifier: str, first_name: str):
         """
