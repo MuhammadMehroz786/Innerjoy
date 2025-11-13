@@ -138,6 +138,7 @@ def webhook_respond():
 def _transform_makecom_to_internal(make_data: dict) -> dict:
     """
     Transform Make.com webhook format to internal message handler format
+    Supports multiple Make.com output formats
 
     Args:
         make_data: Data from Make.com
@@ -146,38 +147,68 @@ def _transform_makecom_to_internal(make_data: dict) -> dict:
         Transformed data for message_handler
     """
     try:
-        # Extract contact info
-        contact_info = make_data.get('Contact', {})
-        contact_id = contact_info.get('Contact ID', '')
-        first_name = contact_info.get('First Name', '')
-        phone = contact_info.get('Phone No.', '')
+        # Check if data is already in simple format (from Make.com HTTP module)
+        if 'contact' in make_data and 'message' in make_data:
+            # Simple format from Make.com HTTP module
+            contact_info = make_data.get('contact', {})
+            message_info = make_data.get('message', {})
 
-        # Extract message info
-        message_info = make_data.get('Message', {})
-        message_content = message_info.get('Message', {})
-        message_text = message_content.get('Text', '')
-        message_type = message_content.get('Type', 'text')
+            contact_id = contact_info.get('id', '')
+            phone = contact_info.get('phone', '')
+            first_name = contact_info.get('firstName', contact_info.get('first_name', ''))
+            message_text = message_info.get('text', '')
 
-        # Transform to internal format
-        internal_format = {
-            'event': 'message.received',
-            'contact': {
-                'id': contact_id,
-                'phone': phone,
-                'firstName': first_name,
-                'lastName': contact_info.get('Last Name', '')
-            },
-            'message': {
-                'id': message_info.get('ID', ''),
-                'type': message_type,
-                'text': message_text,
-                'timestamp': message_info.get('Timestamp', '')
-            },
-            'channel': make_data.get('Channel', {})
-        }
+            internal_format = {
+                'event': 'message.received',
+                'contact': {
+                    'id': contact_id,
+                    'phone': phone,
+                    'firstName': first_name,
+                    'lastName': contact_info.get('lastName', contact_info.get('last_name', ''))
+                },
+                'message': {
+                    'id': message_info.get('id', ''),
+                    'type': message_info.get('type', 'text'),
+                    'text': message_text,
+                    'timestamp': message_info.get('timestamp', '')
+                },
+                'channel': make_data.get('channel', {})
+            }
 
-        logger.info(f"Transformed Make.com data - Contact: {contact_id}, Phone: {phone}, Text: {message_text}")
-        return internal_format
+            logger.info(f"Transformed Make.com data (simple format) - Contact: {contact_id}, Phone: {phone}, Text: {message_text}")
+            return internal_format
+
+        # Complex format from Make.com Respond.io module
+        else:
+            contact_info = make_data.get('Contact', {})
+            contact_id = contact_info.get('Contact ID', '')
+            first_name = contact_info.get('First Name', '')
+            phone = contact_info.get('Phone No.', '')
+
+            message_info = make_data.get('Message', {})
+            message_content = message_info.get('Message', {})
+            message_text = message_content.get('Text', '')
+            message_type = message_content.get('Type', 'text')
+
+            internal_format = {
+                'event': 'message.received',
+                'contact': {
+                    'id': contact_id,
+                    'phone': phone,
+                    'firstName': first_name,
+                    'lastName': contact_info.get('Last Name', '')
+                },
+                'message': {
+                    'id': message_info.get('ID', ''),
+                    'type': message_type,
+                    'text': message_text,
+                    'timestamp': message_info.get('Timestamp', '')
+                },
+                'channel': make_data.get('Channel', {})
+            }
+
+            logger.info(f"Transformed Make.com data (complex format) - Contact: {contact_id}, Phone: {phone}, Text: {message_text}")
+            return internal_format
 
     except Exception as e:
         logger.error(f"Error transforming Make.com data: {e}", exc_info=True)
