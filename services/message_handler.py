@@ -58,8 +58,8 @@ class MessageHandler:
             contact_id = contact.get('id')
             phone = contact.get('phone')
 
-            # Prefer phone number over contact ID
-            contact_identifier = f"phone:{phone}" if phone else contact_id
+            # Use contact ID as primary identifier (required for Respond.io API)
+            contact_identifier = contact_id if contact_id else f"phone:{phone}"
 
             if not contact_identifier:
                 logger.error("No contact identifier (phone or ID) in webhook data")
