@@ -19,6 +19,7 @@ class Config:
     # Respond.io API Configuration
     RESPOND_API_KEY = os.getenv('RESPOND_API_KEY')
     RESPOND_API_URL = os.getenv('RESPOND_API_URL', 'https://api.respond.io/v2')
+    RESPOND_CHANNEL_ID = os.getenv('RESPOND_CHANNEL_ID')  # WhatsApp Business channel ID
     WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 
     # Google Sheets Configuration

@@ -62,7 +62,8 @@ class MessageHandler:
             phone = contact.get('phone')
 
             # Extract channel ID (required for sending messages via Respond.io)
-            self.channel_id = channel.get('id') if isinstance(channel, dict) else None
+            # Use channel from webhook if available, otherwise use configured channel ID
+            self.channel_id = channel.get('id') if isinstance(channel, dict) else Config.RESPOND_CHANNEL_ID
             logger.info(f"Channel ID: {self.channel_id}")
 
             # Use contact ID as primary identifier (required for Respond.io API)
