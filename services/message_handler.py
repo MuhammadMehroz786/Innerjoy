@@ -28,6 +28,7 @@ class MessageHandler:
             logger.warning("Google Sheets not available - will skip sheet operations")
         self.templates = Config.get_message_templates()
         self.timezone = pytz.timezone(Config.TIMEZONE)
+        self.channel_id = None  # Store channel ID from webhook
 
     def _safe_sheets_operation(self, operation, *args, **kwargs):
         """Safely execute a Google Sheets operation"""
@@ -55,8 +56,14 @@ class MessageHandler:
             # Extract message data
             message = webhook_data.get('message', {})
             contact = webhook_data.get('contact', {})
+            channel = webhook_data.get('channel', {})
+
             contact_id = contact.get('id')
             phone = contact.get('phone')
+
+            # Extract channel ID (required for sending messages via Respond.io)
+            self.channel_id = channel.get('id') if isinstance(channel, dict) else None
+            logger.info(f"Channel ID: {self.channel_id}")
 
             # Use contact ID as primary identifier (required for Respond.io API)
             contact_identifier = contact_id if contact_id else f"phone:{phone}"
@@ -268,7 +275,7 @@ class MessageHandler:
                 zoom_link=Config.ZOOM_PREVIEW_LINK
             )
 
-            self.api.send_message(contact_identifier, message)
+            self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
             self._log_message(contact_identifier, message, 'outbound', 'B1_Z2')
 
             logger.info(f"Sent B1_Z2 to {contact_identifier}")
@@ -325,7 +332,7 @@ class MessageHandler:
                 name=first_name,
                 timeslot=timeslot_display
             )
-            self.api.send_message(contact_identifier, confirmation_message)
+            self.api.send_message(contact_identifier, confirmation_message, channel_id=self.channel_id)
             self._log_message(contact_identifier, confirmation_message, 'outbound', 'B1_Z2A1')
 
             # Send B1 Z2a2 - Forward invite card
@@ -334,7 +341,7 @@ class MessageHandler:
                 registration_link=Config.REGISTRATION_LINK or 'https://your-landing-page.com',
                 sender_name=first_name
             )
-            self.api.send_message(contact_identifier, invite_card)
+            self.api.send_message(contact_identifier, invite_card, channel_id=self.channel_id)
             self._log_message(contact_identifier, invite_card, 'outbound', 'B1_Z2A2')
 
             # Schedule all Tree 1 timed messages
@@ -520,7 +527,7 @@ class MessageHandler:
                 name=first_name,
                 membership_link=Config.MEMBERSHIP_LINK
             )
-            self.api.send_message(contact_identifier, message)
+            self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
             self._log_message(contact_identifier, message, 'outbound', 'B1_S1')
 
             # Schedule remaining sales messages

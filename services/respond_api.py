@@ -157,18 +157,19 @@ class RespondAPI:
         logger.info(f"Sending payload: {payload}")
         return self._make_request('PUT', f'contact/{contact_id}', payload)
 
-    def send_message(self, contact_identifier: str, message: str) -> Dict:
+    def send_message(self, contact_identifier: str, message: str, channel_id: str = None) -> Dict:
         """
         Send a WhatsApp message to a contact
 
         Args:
             contact_identifier: Respond.io contact ID or phone:+1234567890
             message: Message text to send
+            channel_id: Optional channel ID (required for WhatsApp Business)
 
         Returns:
             Message send response
         """
-        logger.info(f"Sending message to contact {contact_identifier}")
+        logger.info(f"Sending message to contact {contact_identifier} via channel {channel_id}")
 
         payload = {
             'message': {
@@ -176,6 +177,10 @@ class RespondAPI:
                 'text': message
             }
         }
+
+        # Add channelId if provided (required for WhatsApp)
+        if channel_id:
+            payload['channelId'] = channel_id
 
         return self._make_request('POST', f'contact/{contact_identifier}/message', payload)
 
