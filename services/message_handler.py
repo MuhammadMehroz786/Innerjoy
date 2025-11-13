@@ -63,11 +63,14 @@ class MessageHandler:
 
             # Extract channel ID (required for sending messages via Respond.io)
             # Use channel from webhook if available, otherwise use configured channel ID
-            self.channel_id = channel.get('id') if isinstance(channel, dict) else Config.RESPOND_CHANNEL_ID
+            channel_id_raw = channel.get('id') if isinstance(channel, dict) else Config.RESPOND_CHANNEL_ID
+            # Convert to integer (Respond.io API requires integer, not string)
+            self.channel_id = int(channel_id_raw) if channel_id_raw else None
             logger.info(f"Channel ID: {self.channel_id}")
 
-            # Use contact ID as primary identifier (required for Respond.io API)
-            contact_identifier = contact_id if contact_id else f"phone:{phone}"
+            # IMPORTANT: Make.com sends its own internal contact ID, NOT Respond.io contact ID
+            # Always use phone number format for Respond.io API
+            contact_identifier = f"phone:{phone}" if phone else contact_id
 
             if not contact_identifier:
                 logger.error("No contact identifier (phone or ID) in webhook data")
