@@ -453,17 +453,29 @@ def update_member_status():
 
         # If becoming a member, send welcome message
         if status in ['trial', 'member']:
-            contact = api.get_contact(contact_id)
-            custom_fields = contact.get('customFields', {})
-            first_name = custom_fields.get(Config.CUSTOM_FIELDS['FIRST_NAME'], 'there')
+            # Get contact info from sheets to get first_name
+            contact_data = sheets.get_contact(contact_id) if sheets else {}
+            first_name = contact_data.get('first_name', 'there')
 
-            welcome_message = Config.get_message_templates()['PAYMENT_RECEIVED'].format(
+            # Choose template based on status
+            if status == 'trial':
+                template_key = 'B1_M1A1'
+                # For trial, we'd need trial_start and trial_end dates
+                # For now, use full membership template
+                template_key = 'B1_M1'
+            else:
+                template_key = 'B1_M1'
+
+            welcome_message = Config.get_message_templates()[template_key].format(
                 name=first_name,
-                member_zoom_link=Config.ZOOM_MEMBER_LINK
+                member_zoom_link=Config.ZOOM_MEMBER_LINK,
+                youtube_playlist_link=Config.YOUTUBE_PLAYLIST_LINK
             )
 
+            # Check 72-hour window before sending
             if api.check_72hr_window(contact_id):
-                api.send_message(contact_id, welcome_message)
+                api.send_message(contact_id, welcome_message, channel_id=Config.RESPOND_CHANNEL_ID)
+                logger.info(f"Sent welcome message to new {status}: {contact_id}")
 
         return jsonify({
             'status': 'updated',
