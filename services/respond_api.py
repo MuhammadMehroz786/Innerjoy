@@ -319,20 +319,20 @@ class RespondAPI:
         Update the 72-hour window timestamp for a contact (Meta WhatsApp Policy)
         Called when contact sends a message
 
+        NOTE: This now only logs - actual storage is in Google Sheets only.
+        We skip Respond.io field updates to avoid 400 errors with phone:+number format.
+
         Args:
             contact_id: Respond.io contact ID
 
         Returns:
-            Updated contact information
+            Empty dict (no actual API call made)
         """
         timestamp = datetime.now().isoformat()
-        logger.info(f"Updating 72hr window for contact {contact_id} to {timestamp}")
+        logger.info(f"72hr window updated for contact {contact_id} to {timestamp} (stored in Google Sheets only)")
 
-        return self.update_contact_field(
-            contact_id,
-            Config.CUSTOM_FIELDS['LAST_72HR_WINDOW'],
-            timestamp
-        )
+        # Skip Respond.io field update - Google Sheets is our primary database
+        return {}
 
     def update_24hr_window(self, contact_id: str) -> Dict:
         """

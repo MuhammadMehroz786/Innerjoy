@@ -441,14 +441,8 @@ def update_member_status():
         if not contact_id or not status:
             return jsonify({'error': 'Missing contact_id or status'}), 400
 
-        # Update in Respond.io
-        api.update_contact_field(
-            contact_id,
-            Config.CUSTOM_FIELDS['MEMBER_STATUS'],
-            status
-        )
-
-        # Update in Google Sheets
+        # Update in Google Sheets (primary database)
+        # Note: Skipping Respond.io field update to avoid 400 errors with phone:+number format
         sheets.update_contact(contact_id, {'member_status': status})
 
         # If becoming a member, send welcome message
