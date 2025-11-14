@@ -173,12 +173,19 @@
                         ? new Date(contact.session_datetime).toLocaleString()
                         : '-';
 
+                    // Show different button based on member status
+                    const isMember = contact.member_status === 'member' || contact.member_status === 'trial';
+                    const memberButton = isMember
+                        ? `<button class="btn-small btn-success" disabled>✓ Member</button>`
+                        : `<button class="btn-small btn-payment" onclick="markAsMember('${contact.contact_id}', '${contact.first_name || 'Contact'}')">Payment Received (Yes)</button>`;
+
                     row.innerHTML = `
                         <td>${contact.first_name || 'Unknown'}</td>
                         <td>${contact.chosen_timeslot || '-'}</td>
                         <td>${sessionTime}</td>
-                        <td><span class="status-badge ${contact.member_status}">${contact.member_status}</span></td>
+                        <td><span class="status-badge ${contact.member_status}">${contact.member_status || 'prospect'}</span></td>
                         <td>
+                            ${memberButton}
                             <button class="btn-small" onclick="viewContact('${contact.contact_id}')">View</button>
                         </td>
                     `;
@@ -269,6 +276,42 @@
                 alert('Error sending message');
             }
         });
+
+        // Mark contact as member (Payment Received)
+        async function markAsMember(contactId, contactName) {
+            if (!confirm(`Mark ${contactName} as a paid member?\n\nThis will:\n✓ Update their status to "member"\n✓ Send them the member welcome message\n✓ Give them access to member content`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/update-member-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contact_id: contactId,
+                        status: 'member'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addLogEntry(`${contactName} marked as member - welcome message sent`);
+                    alert('✓ Payment confirmed!\n\nMember welcome message has been sent.');
+                    loadContacts(); // Refresh table
+                    refreshStats(); // Refresh stats
+                } else {
+                    alert('Error: ' + data.error);
+                    addLogEntry(`Error marking ${contactName} as member: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error marking as member:', error);
+                alert('Error confirming payment. Please try again.');
+                addLogEntry(`Error marking ${contactName} as member: ${error.message}`);
+            }
+        }
 
         // Add log entry
         function addLogEntry(message) {
