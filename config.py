@@ -26,8 +26,8 @@ class Config:
     GOOGLE_SHEETS_ID = os.getenv('GOOGLE_SHEETS_ID')
     GOOGLE_CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
 
-    # Timezone Configuration
-    TIMEZONE = os.getenv('TIMEZONE', 'Asia/Bangkok')
+    # Timezone Configuration (UTC+8 for Singapore & Hong Kong)
+    TIMEZONE = os.getenv('TIMEZONE', 'Asia/Singapore')
 
     # Zoom Configuration
     ZOOM_PREVIEW_LINK = os.getenv('ZOOM_PREVIEW_LINK', 'https://us02web.zoom.us/j/82349172983')
@@ -38,29 +38,37 @@ class Config:
     MEMBERSHIP_PRICE = int(os.getenv('MEMBERSHIP_PRICE', 80))
     TRIAL_PRICE = int(os.getenv('TRIAL_PRICE', 12))
 
-    # Session Time Slots (UTC+7)
+    # Session Time Slots (UTC+8 - Singapore & Hong Kong)
     TIME_SLOTS = {
-        'A': {'day': 'Saturday', 'time': time(15, 30), 'day_num': 5},  # Saturday 15:30
-        'B': {'day': 'Saturday', 'time': time(20, 30), 'day_num': 5},  # Saturday 20:30
-        'C': {'day': 'Sunday', 'time': time(6, 30), 'day_num': 6},     # Sunday 06:30
-        'D': {'day': 'Sunday', 'time': time(15, 30), 'day_num': 6},    # Sunday 15:30
-        'E': {'day': 'Sunday', 'time': time(20, 30), 'day_num': 6}     # Sunday 20:30
+        'A': {'day': 'Saturday', 'time': time(15, 30), 'day_num': 5, 'is_walkin': False},  # Saturday 15:30
+        'B': {'day': 'Saturday', 'time': time(19, 30), 'day_num': 5, 'is_walkin': True, 'end_time': time(21, 30)},  # Saturday 19:30-21:30 (walk-in)
+        'C': {'day': 'Sunday', 'time': time(15, 30), 'day_num': 6, 'is_walkin': False},    # Sunday 15:30
+        'D': {'day': 'Sunday', 'time': time(19, 30), 'day_num': 6, 'is_walkin': True, 'end_time': time(21, 30)}     # Sunday 19:30-21:30 (walk-in)
     }
 
     # Timing Configuration (in minutes)
-    TIMESLOT_RESPONSE_TIMEOUT = 120  # 2 hours
+    TIMESLOT_RESPONSE_TIMEOUT = 120  # 2 hours - triggers Tree 2
     REMINDER_12H = 720  # 12 hours before session
     REMINDER_60MIN = 60  # 1 hour before session
     REMINDER_10MIN = 10  # 10 minutes before session
 
-    # Sales Message Timing (in minutes after session)
-    SALES_S1_DELAY = 5
-    SALES_SHAKEUP_DELAY = 20
-    SALES_S2_DELAY = 120  # 2 hours
+    # Sales Message Timing (Tree 1 - in minutes after session end)
+    SALES_S1_DELAY = 5  # T+5 min after slot
+    SALES_SHAKEUP_DELAY = 20  # T+20 min after slot
+    SALES_S2_DELAY = 120  # T+2 hours after slot
+    SALES_S3_NEXT_MORNING = True  # T+next morning (Sun/Mon) at 9:00 AM
 
-    # Tree 2 Sales Timing (in hours from registration)
-    TREE2_SALES_1 = 22  # 22 hours
-    TREE2_SALES_2 = 23.5  # 23.5 hours
+    # Tree 2 Timing (immediate when no timeslot chosen in 2h)
+    TREE2_RA_IMMEDIATE = True  # Immediate when entering Tree 2
+    TREE2_RB_DELAY = 120  # 2 hours after B2 Ra (in minutes)
+    TREE2_S1_DAY = 0  # Sunday (0=Sunday, 1=Monday)
+    TREE2_S1_TIME = time(16, 0)  # 16:00 (4 PM)
+    TREE2_S2_DAY = 1  # Monday
+    TREE2_S2_TIME = time(9, 0)  # 9:00 AM
+
+    # NoShow/NoSales Re-invite Timing
+    FRIDAY_REINVITE_TIME = time(18, 0)  # Friday 18:00
+    NOSALES_NOSHOW_HOLD_WEEKS = 6  # Hold for 5-6 weeks (waiting for Tier 2 approval)
 
     # 72-Hour Window Configuration (Meta WhatsApp Policy)
     WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days)
@@ -80,10 +88,11 @@ class Config:
         'NAME_REQUESTED': 'name_requested',
     }
 
-    # Ruul Payment Links
-    MEMBERSHIP_LINK = os.getenv('MEMBERSHIP_LINK', '')
-    TRIAL_LINK = os.getenv('TRIAL_LINK', '')
-    REGISTRATION_LINK = os.getenv('REGISTRATION_LINK', '')
+    # Payment Links (innerjoy.live - processed by LAILAOLAB ICT/PhaPay)
+    MEMBERSHIP_LINK = os.getenv('MEMBERSHIP_LINK', 'https://innerjoy.live/membership/')
+    TRIAL_LINK = os.getenv('TRIAL_LINK', 'https://innerjoy.live/fair-trial/')
+    REGISTRATION_LINK = os.getenv('REGISTRATION_LINK', 'https://innerjoy.live/')
+    ZOOM_DOWNLOAD_LINK = 'https://zoom.us/download'
 
     # Message Templates (Exact from Flow Document)
     @staticmethod
@@ -93,86 +102,150 @@ class Config:
             'B1_Z1': "Hi 🌸 I'm Ineke from InnerJoy! Lovely to connect with you. Can you share your (first) name? Then I'll send your Zoom link 🌈",
 
             # B1 Z2 - Send Zoom Link + Ask Timeslot
-            'B1_Z2': """Hey {name}🌸 Here's your free Zoom link 🌈 {zoom_link}
+            'B1_Z2': """Hey {name} 🌸
 
-If this is your first time
-using Zoom (its free & safe)
-Download Zoom here: https://zoom.us/download
+Here is your Zoom link 🌈
 
-Which day + time fits you best? Choose your letter below 👇
+{zoom_link}
 
-A = Saturday 15:30 o'clock
-B = Saturday 20:30 o'clock
-C = Sunday 06:30 o'clock
-D = Sunday 15:30 o'clock
-E = Sunday 20:30 o'clock
 
-All times are in UTC+7 ⏰
 
-Please send us your choice 💫 A, B, C, D or E !""",
+If Zoom is new for you,
+
+download it here:
+
+{zoom_download_link}
+
+
+
+We host free walk-in
+
+preview sessions this
+
+weekend for SG & HK (UTC+8).
+
+These are Renew Your Inner Joy
+
+preview sessions ✨
+
+Join 20–30 mins anytime
+
+in this timeframe to feel the uplifting energy 💛
+
+
+
+Choose your option 👇
+
+
+
+A = Sat 15:30
+
+B = Sat 19:30–21:30 (walk-in)
+
+C = Sun 15:30
+
+D = Sun 19:30–21:30 (walk-in)
+
+
+
+All times in UTC+8 ⏰
+
+Reply A, B, C or D 💫""",
 
             # B1 Z2a1 - Confirm Timeslot
-            'B1_Z2A1': """Hey {name} 💖 Great — you're on the list!
+            'B1_Z2A1': """Hey {name} 💖
+Great — you're on the list!
+🕒 Your chosen time:
+{timeslot} 🌈
 
-🕒 Your chosen time: {timeslot} 🌈
+When you'd love to share
+this moment of Joy
+with friends or family,
+here's a little card 🌼
 
-When you'd love to share this moment of Joy with friends or family, here's a little card 🌼
-
-Use it to invite them 💫 and spread the Joy💕""",
+Use it to invite them 💫
+and spread the Joy💕""",
 
             # B1 Z2a2 - Forward Invite Card
             'B1_Z2A2': """Hey lovely! 🌸
 
-I'm joining a 30 minutes free Zoom preview to "Renew your Inner Joy" at {timeslot} 🌈
+I'm joining a 30 minutes free
+Zoom preview to "Renew your
+Inner Joy" at {timeslot} 🌈
 
-We dance and do playful creative exercises 🎭 It would be so nice to experience this together 💫
+We dance and do playful
+creative exercises 🎭
+It would be so nice
+to experience this together 💫
 
-Will you join too? Click this link to sign up 👇
+Will you join too?
+Click this link to sign up 👇
 {registration_link}
 
-Warm greetings, {sender_name}""",
+Warm greetings,
+{sender_name}""",
 
-            # B1 R1 - Reminder T-12 hours (with thumbs up)
-            'B1_R1': """Hello {name} 🌸 Just a gentle reminder — your "Renew your Inner Joy" Zoom preview is coming soon ✨
+            # B1 R1 - Reminder T-12 hours
+            'B1_R1': """Hello {name} 🌸
+Just a gentle reminder —
+your "Renew your Inner Joy"
+Zoom preview is coming soon ✨
 
-🕒 Your session starts at {timeslot} (UTC+7)
+🕒 Your session starts at
+{timeslot} (UTC+8)
 
-Question:
-Send us a 👍 if you plan to join!
+I'm so happy you're joining!
+Can't wait to see you soon!
+Ineke – Inner Joy""",
 
-I'm so happy you're joining! Can't wait to see you soon! Ineke – Inner Joy""",
-
-            # B1 R2 - Reminder T-60 minutes (NO thumbs up - removed per new requirements)
+            # B1 R2 - Reminder T-60 minutes
             'B1_R2': """Hello {name} 🌸
 
-We're gathering soon for "Renew your Inner Joy"
+We're gathering soon for
+"Renew your Inner Joy"
 
-🕒 Starts at {timeslot} (UTC+7)
+🕒 Starts at {timeslot} (UTC+8)
 
 Here's your join link 👇
 {zoom_link}
 
-I'm so happy you're joining! Can't wait to see you soon! Ineke – Inner Joy""",
+I'm so happy you're joining!
+Can't wait to see you soon!
+Ineke – Inner Joy""",
 
-            # B1 R3 - Reminder T-10 minutes (NO thumbs up - removed per new requirements)
+            # B1 R3 - Reminder T-10 minutes
             'B1_R3': """Hi {name} 🌼
 
-We start in 10 minutes! 30 minutes of live fun exercises to Renew your Inner Joy! ✨
+We start in 10 minutes!
+30 minutes of live fun
+exercises to Renew
+your Inner Joy! ✨
 
 Tap to join now
 {zoom_link}
 
-So happy you're coming! Ineke – Inner Joy""",
+
+So happy you're coming!
+Ineke – Inner Joy""",
 
             # B1 S1 - Sales Offer (T+5 min after slot)
             'B1_S1': """Hey {name} 🌸
 
-How lovely that you just joined our Inner Joy Preview! 💫
+How lovely that you just
+joined our Inner Joy Preview! 💫
 
-Our 3-month membership is just $80 💖
+Our 3-month membership
+is just $80 💖
 
-Click here to explore 👇 and join!
-Our Membership offer
+Click here to explore 👇
+our Membership offer 💕
+
+{membership_link}
+
+and it's also our secure
+payment page 🌈
+
+Click here to Join 👇
 {membership_link}""",
 
             # B1 Shake-up 1 - Social Proof (T+20 min)
@@ -185,7 +258,7 @@ just became members 💕
 Come join us and create
 more Joy in your life 🌈
 
-Here's our Membership Page
+Here's our Membership Page 👇
 {membership_link}""",
 
             # B1 S2 - Sales Offer 2 (T+2 hrs after slot)
@@ -206,12 +279,12 @@ Go for the full experience 💖
 only $80 for full access:
 {membership_link}""",
 
-            # B1 S3 - Sales Offer 3 (Sun/Mon morning 9:00 AM)
-            'B1_S3': """Hi {name} 🌿
-
+            # B1 S3 - Sales Offer 3 (Next morning Sun/Mon 9:00 AM)
+            'B1_S3': """Hi {name} 🌞
 Good morning!
+
 Still thinking about the
-playful session with Ineke? 😊
+playful session with Ineke? 💫
 
 Would you love to feel that joy
 more often in your week? 🌸
@@ -222,29 +295,31 @@ only $80 for full access:
 {membership_link}
 
 OR…
+
 Try our Fair Trial —
 10 days for $12:
 {trial_link}""",
 
             # B1 M1 - Member Welcome (Full Membership)
-            'B1_M1': """Congratulations {name}! 🌸
+            'B1_M1': """Congratulations, {name}! 🌸
 
-Welcome to Renew Your Inner Joy ✨
+You're now a member of
+Renew Your Inner Joy ✨
 
-Here's your Zoom link for this week:
+This Zoom link gives you
+full access Monday to Friday —
+daily live 20-minute sessions
+at 20:00 / 20:30 (UTC+8)
+
+This week's Zoom link:
 {member_zoom_link}
 
-Join us Mon–Fri 💫
-Live 20-min sessions
-6:30 / 20:30 (UTC +7)
-
-Missed a session? No worries 💕
-
-All replays + weekend training
-are in this week's playlist 🌼
+This week's YouTube link for
+the recordings:
 {youtube_playlist_link}
 
-So happy to have you with us 💫
+💛 So happy to have you with us 💖
+
 Ineke""",
 
             # B1 M1a1 - Member Welcome (Fair Trial)
@@ -253,129 +328,169 @@ Ineke""",
 Your Fair Trial is active:
 {trial_start} → {trial_end}
 
-Here's your Zoom link for this week:
+Friendly heads-up:
+on day 7, ({trial_day7}) we'll remind you.
+If you take no action,
+your trial will roll into
+the full 3-month membership.
+
+This Zoom link gives you
+full access Monday to Friday —
+daily live 20-minute sessions
+at 20:00 / 20:30 (UTC+8)
+
+This week's Zoom link:
 {member_zoom_link}
 
-Join us Mon–Fri 💫
-Live 20-min sessions
-6:30 / 20:30 (UTC +7)
-
-Missed a session? No worries 💕
-
-All replays + weekend training
-are in this week's playlist 🌼
-{youtube_playlist_link}
-
-💖 So happy you've joined""",
+💛 So happy you've joined""",
 
             # B1 NoSales + NoShow - Combined Friday Follow-up (18:00)
             # This message is sent to BOTH NoSales (attended but didn't buy) AND NoShow (didn't attend)
             # IMPORTANT: Requires Tier 2 approval from Meta (outbound message)
+            # NOTE: Hold 5-6 weeks before sending (waiting for Tier 2 verification)
             'B1_NOSALES': """Hello {name} 🌸
-
 I'd love to invite you again 💕
 
 Join me this weekend for another
 playful Inner Joy Zoom session 🌈
 
-Come as you are — comfy clothes,
-curious heart, and a smile 😊
 
-Choose your time 👇
-B = Sat 20:30 A = Sat 15:30
-E = Sun 20:30 D = Sun 15:30
-C = Sun 06:30 (UTC +7)
+Come as you are —
+comfy clothes, curious heart,
+and a smile 😄
 
-Your free Zoom link:
+Free Zoom preview session link:
 {zoom_link}
 
-Just send your letter 💫 A–E
+Choose your option 👇
+
+
+
+A = Sat 15:30
+
+B = Sat 19:30–21:30 (walk-in)
+
+C = Sun 15:30
+
+D = Sun 19:30–21:30 (walk-in)
+
+
+
+All times in UTC+8 ⏰
+
+Reply A, B, C or D
+
+
 
 Or start your 3-month membership 💖
 Renew Your Inner Joy — only $80
 {membership_link}
 
-Can't wait to see you again 💕""",
+Can't wait to see you again 🌼""",
 
             # B1 NoShow - Same as NoSales (combined template)
+            # NOTE: Hold 5-6 weeks before sending (waiting for Tier 2 verification)
             'B1_NOSHOW': """Hello {name} 🌸
-
 I'd love to invite you again 💕
 
 Join me this weekend for another
 playful Inner Joy Zoom session 🌈
 
-Come as you are — comfy clothes,
-curious heart, and a smile 😊
 
-Choose your time 👇
-B = Sat 20:30 A = Sat 15:30
-E = Sun 20:30 D = Sun 15:30
-C = Sun 06:30 (UTC +7)
+Come as you are —
+comfy clothes, curious heart,
+and a smile 😄
 
-Your free Zoom link:
+Free Zoom preview session link:
 {zoom_link}
 
-Just send your letter 💫 A–E
+Choose your option 👇
+
+
+
+A = Sat 15:30
+
+B = Sat 19:30–21:30 (walk-in)
+
+C = Sun 15:30
+
+D = Sun 19:30–21:30 (walk-in)
+
+
+
+All times in UTC+8 ⏰
+
+Reply A, B, C or D
+
+
 
 Or start your 3-month membership 💖
 Renew Your Inner Joy — only $80
 {membership_link}
 
-Can't wait to see you again 💕""",
+Can't wait to see you again 🌼""",
 
-            # B2 Ra - No Timeslot Preference Reminder
-            'B2_RA': """Hey {name}🌸 Here's your free Zoom link 🌈
+            # B2 Ra - No Timeslot Preference Reminder (Immediate when entering Tree 2)
+            'B2_RA': """Hey {name}🌸
+Here's your free Zoom link 🌈
 {zoom_link}
 
 Which day + time fits you best?
 Choose your letter below 👇
 
-A = Saturday 15:30 o'clock
-B= Saturday 20:30 o'clock
-C= Sunday 06:30 o'clock
-D= Sunday 15:30 o'clock
-E= Sunday 20:30 o'clock
+A = Sat 15:30
 
-All times are in UTC+7 ⏰
+B = Sat 19:30–21:30 (walk-in)
 
-Please send us your choice 💫
-A, B, C, D or E !
+C = Sun 15:30
 
-Or : I already attended""",
+D = Sun 19:30–21:30 (walk-in)
 
-            # B2 Rb - No Timeslot Preference Reminder (2nd)
-            'B2_RB': """Hey {name}🌸 Here's your free Zoom link
+
+
+All times in UTC+8 ⏰
+
+Reply A, B, C or D 💫
+
+Or: I already attended""",
+
+            # B2 Rb - No Timeslot Preference Reminder (2 hours after B2 Ra)
+            'B2_RB': """Hey {name}🌸
+Here's your free Zoom link
 {zoom_link}
 
 Which day + time fits you best?
 Choose your letter below 👇
 
-A =Saturday 15:30 o'clock
-B= Saturday 20:30 o'clock
-C= Sunday 06:30 o'clock
-D=Sunday 15:30 o'clock
-E= Sunday 20:30 o'clock
+A = Sat 15:30
 
-All times are in UTC+7 ⏰
+B = Sat 19:30–21:30 (walk-in)
 
-Please send us your choice 💫
-A, B, C, D or E !
+C = Sun 15:30
 
-Or : I already attended""",
+D = Sun 19:30–21:30 (walk-in)
+
+All times in UTC+8 ⏰
+
+Reply A, B, C or D""",
 
             # B2 S1 - Sales Offer 1 (Sunday afternoon 16:00)
             'B2_S1': """Hey {name}! 🌸
 
 Is Inner Joy your new goal? 💫
 
-3 Month Membership — $80 💖
+3 Months Membership — $80 💖
 
 Click below to explore 👇
-our Membership offer
+our Membership offer 💕
+
 {membership_link}
 
-It's also our secure payment page 🌈""",
+It's also our secure
+payment page 🌈
+
+Click here to join 👇
+{membership_link}""",
 
             # B2 S2 - Sales Offer 2 (Monday morning 9:00)
             'B2_S2': """Hi {name} 🌿
@@ -399,10 +514,10 @@ only $80 for full access:
     @staticmethod
     def get_timeslot_display(timeslot: str) -> str:
         """
-        Get display text for a timeslot (e.g., 'Saturday 15:30 o'clock')
+        Get display text for a timeslot (e.g., 'Saturday 15:30' or 'Saturday 19:30-21:30 (walk-in)')
 
         Args:
-            timeslot: Timeslot letter (A, B, C, D, E)
+            timeslot: Timeslot letter (A, B, C, D)
 
         Returns:
             Display text for the timeslot
@@ -415,7 +530,14 @@ only $80 for full access:
         time_obj = slot_info['time']
         time_str = time_obj.strftime('%H:%M')
 
-        return f"{day} {time_str} o'clock"
+        # Check if this is a walk-in slot
+        if slot_info.get('is_walkin', False):
+            end_time = slot_info.get('end_time')
+            if end_time:
+                end_time_str = end_time.strftime('%H:%M')
+                return f"{day} {time_str}–{end_time_str} (walk-in)"
+
+        return f"{day} {time_str}"
 
     @staticmethod
     def validate_config():

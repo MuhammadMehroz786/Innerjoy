@@ -231,15 +231,9 @@ class MessageHandler:
                 logger.info(f"Receiving name from {contact_identifier}")
                 return self._handle_name_response(contact_identifier, message_text)
 
-            # Check if they sent thumbs up
-            if message_text.strip() == '👍':
-                self._handle_thumbs_up(contact_identifier)
-                # Don't process further - thumbs up is just acknowledgment
-                return True
-
-            # Check if this is a timeslot selection (A-E)
+            # Check if this is a timeslot selection (A-D)
             message_upper = message_text.upper().strip()
-            if message_upper in ['A', 'B', 'C', 'D', 'E']:
+            if message_upper in ['A', 'B', 'C', 'D']:
                 logger.info(f"Timeslot selection detected: {message_upper}")
                 return self._handle_timeslot_selection(contact_identifier, sheet_contact, message_upper)
 
@@ -329,7 +323,8 @@ class MessageHandler:
         try:
             message = self.templates['B1_Z2'].format(
                 name=first_name,
-                zoom_link=Config.ZOOM_PREVIEW_LINK
+                zoom_link=Config.ZOOM_PREVIEW_LINK,
+                zoom_download_link=Config.ZOOM_DOWNLOAD_LINK
             )
 
             self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
@@ -342,13 +337,13 @@ class MessageHandler:
 
     def _handle_timeslot_selection(self, contact_identifier: str, sheet_contact: Dict, timeslot: str) -> bool:
         """
-        Handle timeslot selection (A, B, C, D, or E)
+        Handle timeslot selection (A, B, C, or D)
         This is B1 Z2a1 - Confirm slot + send invite card
 
         Args:
             contact_identifier: Contact identifier
             sheet_contact: Contact data from sheets
-            timeslot: Selected timeslot (A, B, C, D, E)
+            timeslot: Selected timeslot (A, B, C, D)
 
         Returns:
             True if handled successfully
@@ -411,36 +406,12 @@ class MessageHandler:
             logger.error(f"Error handling timeslot selection: {e}", exc_info=True)
             return False
 
-    def _handle_thumbs_up(self, contact_identifier: str):
-        """
-        Handle thumbs up confirmation
-        Updates tracking but doesn't change messages
-
-        Args:
-            contact_identifier: Contact identifier
-        """
-        try:
-            logger.info(f"Received thumbs up from {contact_identifier}")
-
-            # Update in sheets
-            self._safe_sheets_operation(
-                lambda: self.sheets.update_contact(contact_identifier, {
-                    'thumbs_up_received': 'Yes'
-                }) if self.sheets else None
-            )
-
-            # Log
-            self._log_message(contact_identifier, '👍', 'inbound', 'THUMBS_UP')
-
-        except Exception as e:
-            logger.warning(f"Error handling thumbs up: {e}")
-
     def _calculate_next_session(self, timeslot: str) -> datetime:
         """
         Calculate the next session datetime for a given timeslot
 
         Args:
-            timeslot: Timeslot letter (A, B, C, D, E)
+            timeslot: Timeslot letter (A, B, C, D)
 
         Returns:
             Next session datetime
