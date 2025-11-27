@@ -87,19 +87,31 @@ class MessageHandler:
 
             logger.info(f"Message content: {message_text}")
 
-            # ===== 72-HOUR WINDOW RESET =====
-            # Every inbound message resets the 72-hour window (Meta WhatsApp Policy)
-            self._reset_72hr_window(contact_identifier)
-
-            # Get or create contact in sheets
+            # ===== CHECK IF EXISTING CONTACT =====
+            # Get contact from sheets first to check if source is already determined
             sheet_contact = self._safe_sheets_operation(
                 lambda: self.sheets.get_contact(contact_identifier) if self.sheets else None
             )
 
+            # ===== DETECT OR RETRIEVE CONTACT SOURCE =====
+            if sheet_contact and sheet_contact.get('contact_source'):
+                # Existing contact - use stored source (never re-detect)
+                contact_source = sheet_contact.get('contact_source')
+                logger.info(f"✓ Existing contact - using stored source: {contact_source}")
+            else:
+                # New contact - detect source from first message
+                contact_source = self._detect_contact_source(webhook_data)
+                logger.info(f"✓ New contact - detected source: {contact_source}")
+
+            # ===== RESET MESSAGING WINDOW =====
+            # Every inbound message resets the messaging window (Meta WhatsApp Policy)
+            # Window duration depends on source: 72h for Facebook Ads, 24h for Website
+            self._reset_window(contact_identifier, contact_source)
+
             if not sheet_contact:
                 # New contact - Start Tree 1 Flow: B1 Z1
                 logger.info(f"New contact {contact_identifier}, starting Tree 1")
-                return self._handle_new_contact(contact_identifier, phone, message_text, contact_data=contact)
+                return self._handle_new_contact(contact_identifier, phone, message_text, contact_source=contact_source, contact_data=contact)
             else:
                 # Existing contact - Route based on current state
                 logger.info(f"Existing contact {contact_identifier}, current tree: {sheet_contact.get('current_tree')}, step: {sheet_contact.get('current_step')}")
@@ -109,40 +121,96 @@ class MessageHandler:
             logger.error(f"Error processing message: {e}", exc_info=True)
             return False
 
-    def _reset_72hr_window(self, contact_identifier: str):
+    def _detect_contact_source(self, webhook_data: Dict) -> str:
         """
-        Reset the 72-hour window for a contact (Meta WhatsApp Policy)
+        Detect the contact source from webhook data
+
+        SIMPLE DETECTION LOGIC:
+        1. Check if custom field 'contact_source' is already set (existing contact)
+        2. Check if message contains website trigger text (Config.WEBSITE_TRIGGER_MESSAGE)
+           → If YES: Website source (24-hour window)
+           → If NO: Facebook Ads source (72-hour window - DEFAULT)
+
+        Args:
+            webhook_data: Webhook payload from Respond.io
+
+        Returns:
+            Contact source ('facebook_ads' or 'website')
+        """
+        try:
+            contact = webhook_data.get('contact', {})
+            message = webhook_data.get('message', {})
+
+            # ===== PRIORITY 1: Check if source already set (existing contact) =====
+            custom_fields = contact.get('customFields', {}) if isinstance(contact, dict) else {}
+            source_field = custom_fields.get('contact_source', '')
+
+            if source_field in [Config.SOURCE_FACEBOOK_ADS, Config.SOURCE_WEBSITE]:
+                logger.info(f"✓ Source already set: {source_field}")
+                return source_field
+
+            # ===== PRIORITY 2: Check message text for website trigger =====
+            message_text = message.get('text', '') if isinstance(message, dict) else ''
+
+            # Check if message contains website trigger (case-insensitive)
+            if Config.WEBSITE_TRIGGER_MESSAGE.lower() in message_text.lower():
+                logger.info(f"✓ Website trigger detected in message: '{Config.WEBSITE_TRIGGER_MESSAGE}'")
+                logger.info("→ Source: website (24-hour window)")
+                return Config.SOURCE_WEBSITE
+
+            # ===== DEFAULT: Facebook Ads (72-hour window) =====
+            # All other contacts are assumed to be from Facebook Ads
+            logger.info("✓ No website trigger found")
+            logger.info("→ Source: facebook_ads (72-hour window - DEFAULT)")
+            return Config.SOURCE_FACEBOOK_ADS
+
+        except Exception as e:
+            logger.warning(f"Error detecting contact source: {e}")
+            # Default to Facebook Ads (72h window - matches majority of traffic)
+            logger.info("→ Defaulting to facebook_ads due to error")
+            return Config.SOURCE_FACEBOOK_ADS
+
+    def _reset_window(self, contact_identifier: str, contact_source: str):
+        """
+        Reset the messaging window for a contact (Meta WhatsApp Policy)
         Called on EVERY inbound message
+
+        Window duration depends on contact source:
+        - Facebook Ads: 72-hour window
+        - Website/FB Page: 24-hour window
 
         Args:
             contact_identifier: Contact identifier
+            contact_source: Contact source ('facebook_ads' or 'website')
         """
         try:
             now = datetime.now(self.timezone)
-            window_expires_at = now + timedelta(hours=72)  # 72 hours = 3 days
+            window_hours = Config.get_window_duration(contact_source)
+            window_expires_at = now + timedelta(hours=window_hours)
 
             # Update in sheets
             self._safe_sheets_operation(
                 lambda: self.sheets.update_contact(contact_identifier, {
                     'last_inbound_msg_time': now.isoformat(),
-                    'window_expires_at': window_expires_at.isoformat()
+                    'window_expires_at': window_expires_at.isoformat(),
+                    'contact_source': contact_source
                 }) if self.sheets else None
             )
 
             # Update in Respond.io (optional - custom field may not exist)
             try:
-                self.api.update_72hr_window(contact_identifier)
+                self.api.update_window(contact_identifier, window_hours)
             except Exception as e:
-                logger.debug(f"Could not update 72hr window in Respond.io: {e}")
+                logger.debug(f"Could not update window in Respond.io: {e}")
 
-            logger.info(f"Reset 72hr window for {contact_identifier}, expires: {window_expires_at}")
+            logger.info(f"Reset {window_hours}h window for {contact_identifier} ({contact_source}), expires: {window_expires_at}")
 
         except Exception as e:
-            logger.warning(f"Failed to reset 72hr window: {e}")
+            logger.warning(f"Failed to reset window: {e}")
 
     # ==================== NEW CONTACT FLOW ====================
 
-    def _handle_new_contact(self, contact_identifier: str, phone: str, message_text: str, contact_data: dict = None) -> bool:
+    def _handle_new_contact(self, contact_identifier: str, phone: str, message_text: str, contact_source: str = None, contact_data: dict = None) -> bool:
         """
         Handle a brand new contact
         This triggers B1 Z1 (asking for name) if they haven't been added to sheets yet
@@ -151,15 +219,24 @@ class MessageHandler:
             contact_identifier: Contact identifier
             phone: Phone number
             message_text: Their first message
+            contact_source: Contact source ('facebook_ads' or 'website')
             contact_data: Optional contact data from webhook (e.g., Make.com)
 
         Returns:
             True if handled successfully
         """
         try:
+            # Default to website if not provided (conservative 24h window)
+            if not contact_source:
+                contact_source = Config.SOURCE_WEBSITE
+
+            # Calculate window expiry based on source
+            now = datetime.now(self.timezone)
+            window_hours = Config.get_window_duration(contact_source)
+            window_expires_at = now + timedelta(hours=window_hours)
+
             # Add to sheets with placeholder name
             # We'll get their actual name in the next message
-            now = datetime.now(self.timezone)
             self._safe_sheets_operation(
                 lambda: self.sheets.add_contact({
                     'contact_id': contact_identifier,
@@ -169,17 +246,18 @@ class MessageHandler:
                     'current_step': 'B1_Z1',  # Waiting for name
                     'registration_time': now.isoformat(),
                     'last_inbound_msg_time': now.isoformat(),
-                    'window_expires_at': (now + timedelta(hours=72)).isoformat()  # 72-hour window
+                    'window_expires_at': window_expires_at.isoformat(),
+                    'contact_source': contact_source
                 }) if self.sheets else None
             )
 
             # Log their first message
             self._log_message(contact_identifier, message_text, 'inbound', 'FIRST_CONTACT')
 
-            # Send B1 Z1 - Ask for name
-            self._send_b1_z1(contact_identifier)
+            # Send B1 Z1 - Ask for name (using appropriate template based on source)
+            self._send_b1_z1(contact_identifier, contact_source)
 
-            logger.info(f"New contact {contact_identifier} added, sent B1_Z1 (asking for name)")
+            logger.info(f"New contact {contact_identifier} added ({contact_source}, {window_hours}h window), sent B1_Z1")
             return True
 
         except Exception as e:
@@ -253,20 +331,30 @@ class MessageHandler:
 
     # ==================== TREE 1 FLOW - MESSAGE SENDING ====================
 
-    def _send_b1_z1(self, contact_identifier: str):
+    def _send_b1_z1(self, contact_identifier: str, contact_source: str = None):
         """
         Send B1 Z1 - Ask for name
+        Uses different message template based on contact source
 
         Args:
             contact_identifier: Contact identifier
+            contact_source: Contact source ('facebook_ads' or 'website')
         """
         try:
-            message = self.templates['B1_Z1']
+            # Select appropriate template based on source
+            if contact_source == Config.SOURCE_WEBSITE:
+                # Website contacts get the 24h flow message (combined name + timeslots)
+                message = self.templates['B1_Z1_24H']
+                template_code = 'B1_Z1_24H'
+            else:
+                # Facebook Ads contacts get the 72h flow message (name only)
+                message = self.templates['B1_Z1']
+                template_code = 'B1_Z1'
 
             self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
-            self._log_message(contact_identifier, message, 'outbound', 'B1_Z1')
+            self._log_message(contact_identifier, message, 'outbound', template_code)
 
-            logger.info(f"Sent B1_Z1 to {contact_identifier} (asking for name)")
+            logger.info(f"Sent {template_code} to {contact_identifier} ({contact_source})")
 
         except Exception as e:
             logger.error(f"Error sending B1_Z1: {e}")

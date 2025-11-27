@@ -314,9 +314,9 @@ class RespondAPI:
         # Just call the 72hr version now
         return self.check_72hr_window(contact_id)
 
-    def update_72hr_window(self, contact_id: str) -> Dict:
+    def update_window(self, contact_id: str, window_hours: int = 72) -> Dict:
         """
-        Update the 72-hour window timestamp for a contact (Meta WhatsApp Policy)
+        Update the messaging window timestamp for a contact (Meta WhatsApp Policy)
         Called when contact sends a message
 
         NOTE: This now only logs - actual storage is in Google Sheets only.
@@ -324,15 +324,31 @@ class RespondAPI:
 
         Args:
             contact_id: Respond.io contact ID
+            window_hours: Window duration in hours (72 for Facebook Ads, 24 for Website)
 
         Returns:
             Empty dict (no actual API call made)
         """
         timestamp = datetime.now().isoformat()
-        logger.info(f"72hr window updated for contact {contact_id} to {timestamp} (stored in Google Sheets only)")
+        logger.info(f"{window_hours}h window updated for contact {contact_id} to {timestamp} (stored in Google Sheets only)")
 
         # Skip Respond.io field update - Google Sheets is our primary database
         return {}
+
+    def update_72hr_window(self, contact_id: str) -> Dict:
+        """
+        Update the 72-hour window timestamp for a contact (Meta WhatsApp Policy)
+        Called when contact sends a message
+
+        NOTE: Legacy method - use update_window() instead
+
+        Args:
+            contact_id: Respond.io contact ID
+
+        Returns:
+            Empty dict (no actual API call made)
+        """
+        return self.update_window(contact_id, 72)
 
     def update_24hr_window(self, contact_id: str) -> Dict:
         """

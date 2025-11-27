@@ -70,16 +70,28 @@ class Config:
     FRIDAY_REINVITE_TIME = time(18, 0)  # Friday 18:00
     NOSALES_NOSHOW_HOLD_WEEKS = 6  # Hold for 5-6 weeks (waiting for Tier 2 approval)
 
-    # 72-Hour Window Configuration (Meta WhatsApp Policy)
-    WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days)
-    WINDOW_24H_SECONDS = 86400  # Legacy: kept for backwards compatibility
+    # Contact Source Types
+    SOURCE_FACEBOOK_ADS = 'facebook_ads'  # 72-hour window
+    SOURCE_WEBSITE = 'website'  # 24-hour window
+
+    # Website Detection Trigger Message
+    # This is the pre-filled message that website visitors will send via Click-to-WhatsApp
+    # If the first message contains this phrase, contact is tagged as 'website' (24h window)
+    # Otherwise, contact is tagged as 'facebook_ads' (72h window)
+    # Using a natural phrase that fits into a normal greeting
+    WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'from your website')
+
+    # Window Configuration (Meta WhatsApp Policy)
+    WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days) - for Facebook Ads
+    WINDOW_24H_SECONDS = 86400   # 24 hours in seconds - for Website/FB Page
 
     # Respond.io Custom Field Names
     CUSTOM_FIELDS = {
         'FIRST_NAME': 'firstName',
         'CHOSEN_TIMESLOT': 'chosen_timeslot',
-        'LAST_72HR_WINDOW': 'last_72hr_window_start',  # Updated to 72hr window
-        'LAST_24HR_WINDOW': 'last_24hr_window_start',  # Legacy: kept for backwards compatibility
+        'LAST_72HR_WINDOW': 'last_72hr_window_start',  # For Facebook Ads contacts
+        'LAST_24HR_WINDOW': 'last_24hr_window_start',  # For Website/FB Page contacts
+        'CONTACT_SOURCE': 'contact_source',  # 'facebook_ads' or 'website'
         'THUMBS_UP': 'thumbs_up_received',
         'MEMBER_STATUS': 'member_status',
         'REMINDER_12H': 'reminder_12h_sent',
@@ -98,8 +110,31 @@ class Config:
     @staticmethod
     def get_message_templates():
         return {
-            # B1 Z1 - Ask Name
+            # ========== 72-HOUR WINDOW MESSAGES (Facebook Ads Contacts) ==========
+
+            # B1 Z1 - Ask Name (72h flow)
             'B1_Z1': "Hi 🌸 I'm Ineke from InnerJoy! Lovely to connect with you. Can you share your (first) name? Then I'll send your Zoom link 🌈",
+
+            # ========== 24-HOUR WINDOW MESSAGES (Website/FB Page Contacts) ==========
+
+            # B1 Z1 - Ask Name (24h flow - combined with timeslot info)
+            'B1_Z1_24H': """Hi 🌸 I'm Ineke from InnerJoy!
+Lovely to connect with you.
+Please share your first name and
+I'll send your free Zoom preview link 🌈
+
+These are our free
+Renew Your Inner Joy
+Zoom preview sessions
+this weekend (UTC+8):
+
+A — Sat 15:30 (30 min)
+B — Sat 19:30–21:30 (walk-in)
+C — Sun 15:30 (30 min)
+D — Sun 19:30–21:30 (walk-in)
+
+Please share your first name and
+I'll send your free Zoom preview link 🌈""",
 
             # B1 Z2 - Send Zoom Link + Ask Timeslot
             'B1_Z2': """Hey {name} 🌸
@@ -538,6 +573,25 @@ only $80 for full access:
                 return f"{day} {time_str}–{end_time_str} (walk-in)"
 
         return f"{day} {time_str}"
+
+    @staticmethod
+    def get_window_duration(contact_source: str) -> int:
+        """
+        Get the appropriate window duration based on contact source
+
+        Args:
+            contact_source: Contact source ('facebook_ads' or 'website')
+
+        Returns:
+            Window duration in hours (72 for facebook_ads, 24 for website)
+        """
+        if contact_source == Config.SOURCE_FACEBOOK_ADS:
+            return 72  # 72-hour window for Facebook Ads
+        elif contact_source == Config.SOURCE_WEBSITE:
+            return 24  # 24-hour window for Website/FB Page
+        else:
+            # Default to 24-hour window for unknown sources (conservative)
+            return 24
 
     @staticmethod
     def validate_config():

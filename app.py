@@ -158,19 +158,26 @@ def _transform_makecom_to_internal(make_data: dict) -> dict:
             first_name = contact_info.get('firstName', contact_info.get('first_name', ''))
             message_text = message_info.get('text', '')
 
+            # Extract custom fields and tags (if present in Make.com payload)
+            custom_fields = contact_info.get('customFields', contact_info.get('custom_fields', {}))
+            tags = contact_info.get('tags', [])
+
             internal_format = {
                 'event': 'message.received',
                 'contact': {
                     'id': contact_id,
                     'phone': phone,
                     'firstName': first_name,
-                    'lastName': contact_info.get('lastName', contact_info.get('last_name', ''))
+                    'lastName': contact_info.get('lastName', contact_info.get('last_name', '')),
+                    'customFields': custom_fields,
+                    'tags': tags
                 },
                 'message': {
                     'id': message_info.get('id', ''),
                     'type': message_info.get('type', 'text'),
                     'text': message_text,
-                    'timestamp': message_info.get('timestamp', '')
+                    'timestamp': message_info.get('timestamp', ''),
+                    'context': message_info.get('context', {})
                 },
                 'channel': make_data.get('channel', {})
             }
@@ -190,24 +197,46 @@ def _transform_makecom_to_internal(make_data: dict) -> dict:
             message_text = message_content.get('Text', '')
             message_type = message_content.get('Type', 'text')
 
+            # Extract custom fields and tags from Make.com complex format
+            # Make.com might send custom fields as separate keys
+            custom_fields = {}
+            tags = []
+
+            # Look for custom field keys in contact_info
+            for key, value in contact_info.items():
+                # Skip standard fields
+                if key not in ['Contact ID', 'First Name', 'Last Name', 'Phone No.', 'Email']:
+                    # This is likely a custom field
+                    custom_fields[key] = value
+
+            # Check if tags exist in specific field
+            if 'Tags' in contact_info:
+                tags = contact_info.get('Tags', [])
+                if isinstance(tags, str):
+                    # If tags come as comma-separated string, split them
+                    tags = [t.strip() for t in tags.split(',')]
+
             internal_format = {
                 'event': 'message.received',
                 'contact': {
                     'id': contact_id,
                     'phone': phone,
                     'firstName': first_name,
-                    'lastName': contact_info.get('Last Name', '')
+                    'lastName': contact_info.get('Last Name', ''),
+                    'customFields': custom_fields,
+                    'tags': tags
                 },
                 'message': {
                     'id': message_info.get('ID', ''),
                     'type': message_type,
                     'text': message_text,
-                    'timestamp': message_info.get('Timestamp', '')
+                    'timestamp': message_info.get('Timestamp', ''),
+                    'context': message_content.get('Context', {})
                 },
                 'channel': make_data.get('Channel', {})
             }
 
-            logger.info(f"Transformed Make.com data (complex format) - Contact: {contact_id}, Phone: {phone}, Text: {message_text}")
+            logger.info(f"Transformed Make.com data (complex format) - Contact: {contact_id}, Phone: {phone}, Text: {message_text}, CustomFields: {list(custom_fields.keys())}, Tags: {tags}")
             return internal_format
 
     except Exception as e:
@@ -305,7 +334,8 @@ def get_stats():
                 'without_timeslot': 0,
                 'thumbs_up_count': 0,
                 'members': 0,
-                'timeslot_distribution': {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0},
+                'source_distribution': {'facebook_ads': 0, 'website': 0},
+                'timeslot_distribution': {'A': 0, 'B': 0, 'C': 0, 'D': 0},
                 'timestamp': datetime.now().isoformat(),
                 'note': 'Google Sheets not configured'
             }), 200
@@ -319,9 +349,13 @@ def get_stats():
         thumbs_up_count = len([c for c in contacts if c.get('thumbs_up') == 'Yes'])
         members = len([c for c in contacts if c.get('member_status') in ['trial', 'member']])
 
+        # Count by source
+        facebook_ads_count = len([c for c in contacts if c.get('contact_source') == 'facebook_ads'])
+        website_count = len([c for c in contacts if c.get('contact_source') == 'website'])
+
         # Count by timeslot
         timeslot_counts = {}
-        for slot in ['A', 'B', 'C', 'D', 'E']:
+        for slot in ['A', 'B', 'C', 'D']:
             timeslot_counts[slot] = len([c for c in contacts if c.get('chosen_timeslot') == slot])
 
         return jsonify({
@@ -330,6 +364,10 @@ def get_stats():
             'without_timeslot': without_timeslot,
             'thumbs_up_count': thumbs_up_count,
             'members': members,
+            'source_distribution': {
+                'facebook_ads': facebook_ads_count,
+                'website': website_count
+            },
             'timeslot_distribution': timeslot_counts,
             'timestamp': datetime.now().isoformat()
         }), 200
