@@ -127,11 +127,9 @@ class MessageHandler:
 
         DETECTION LOGIC:
         1. Check if custom field 'contact_source' is already set (existing contact)
-        2. Check if message contains website trigger text
-           → If YES: Website source (24-hour window)
-        3. Check if message contains Facebook Ads trigger text
+        2. Check if message contains Facebook Ads trigger text
            → If YES: Facebook Ads source (72-hour window)
-        4. Default to Facebook Ads (72-hour window)
+        3. Default to Website/Outside Lead (24-hour window)
 
         Args:
             webhook_data: Webhook payload from Respond.io
@@ -151,14 +149,8 @@ class MessageHandler:
                 logger.info(f"✓ Source already set: {source_field}")
                 return source_field
 
-            # ===== PRIORITY 2: Check message text for triggers =====
+            # ===== PRIORITY 2: Check message text for Facebook Ads trigger =====
             message_text = message.get('text', '') if isinstance(message, dict) else ''
-
-            # Check for website trigger (case-insensitive)
-            if Config.WEBSITE_TRIGGER_MESSAGE.lower() in message_text.lower():
-                logger.info(f"✓ Website trigger detected: '{Config.WEBSITE_TRIGGER_MESSAGE}'")
-                logger.info("→ Source: website (24-hour window)")
-                return Config.SOURCE_WEBSITE
 
             # Check for Facebook Ads trigger (case-insensitive)
             if Config.FACEBOOK_ADS_TRIGGER_MESSAGE.lower() in message_text.lower():
@@ -166,17 +158,17 @@ class MessageHandler:
                 logger.info("→ Source: facebook_ads (72-hour window - VERIFIED)")
                 return Config.SOURCE_FACEBOOK_ADS
 
-            # ===== DEFAULT: Facebook Ads (72-hour window) =====
-            # Contacts without specific triggers default to Facebook Ads
-            logger.info("✓ No specific trigger found")
-            logger.info("→ Source: facebook_ads (72-hour window - DEFAULT)")
-            return Config.SOURCE_FACEBOOK_ADS
+            # ===== DEFAULT: Website/Outside Lead (24-hour window) =====
+            # All contacts without Facebook Ads trigger default to website (24h window)
+            logger.info("✓ No Facebook Ads trigger found")
+            logger.info("→ Source: website/outside lead (24-hour window - DEFAULT)")
+            return Config.SOURCE_WEBSITE
 
         except Exception as e:
             logger.warning(f"Error detecting contact source: {e}")
-            # Default to Facebook Ads (72h window - matches majority of traffic)
-            logger.info("→ Defaulting to facebook_ads due to error")
-            return Config.SOURCE_FACEBOOK_ADS
+            # Default to Website (24h window - conservative approach)
+            logger.info("→ Defaulting to website due to error")
+            return Config.SOURCE_WEBSITE
 
     def _reset_window(self, contact_identifier: str, contact_source: str):
         """

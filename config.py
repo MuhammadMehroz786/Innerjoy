@@ -75,11 +75,13 @@ class Config:
     SOURCE_WEBSITE = 'website'  # 24-hour window
 
     # Source Detection Trigger Messages
-    # Website Detection: Pre-filled message from website Click-to-WhatsApp button
-    WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'free Zoom preview link')
-
     # Facebook Ads Detection: Pre-filled message from Facebook Ads Click-to-WhatsApp button
+    # If this message is detected in the first contact message → 72-hour window
     FACEBOOK_ADS_TRIGGER_MESSAGE = os.getenv('FACEBOOK_ADS_TRIGGER_MESSAGE', "I'm excited for the session")
+
+    # Website Trigger: Optional reference (not used for detection)
+    # All contacts WITHOUT the Facebook Ads trigger → 24-hour window (website/outside leads)
+    WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'free Zoom preview link')
 
     # Window Configuration (Meta WhatsApp Policy)
     WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days) - for Facebook Ads
