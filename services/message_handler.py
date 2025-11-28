@@ -125,11 +125,13 @@ class MessageHandler:
         """
         Detect the contact source from webhook data
 
-        SIMPLE DETECTION LOGIC:
+        DETECTION LOGIC:
         1. Check if custom field 'contact_source' is already set (existing contact)
-        2. Check if message contains website trigger text (Config.WEBSITE_TRIGGER_MESSAGE)
+        2. Check if message contains website trigger text
            → If YES: Website source (24-hour window)
-           → If NO: Facebook Ads source (72-hour window - DEFAULT)
+        3. Check if message contains Facebook Ads trigger text
+           → If YES: Facebook Ads source (72-hour window)
+        4. Default to Facebook Ads (72-hour window)
 
         Args:
             webhook_data: Webhook payload from Respond.io
@@ -149,18 +151,24 @@ class MessageHandler:
                 logger.info(f"✓ Source already set: {source_field}")
                 return source_field
 
-            # ===== PRIORITY 2: Check message text for website trigger =====
+            # ===== PRIORITY 2: Check message text for triggers =====
             message_text = message.get('text', '') if isinstance(message, dict) else ''
 
-            # Check if message contains website trigger (case-insensitive)
+            # Check for website trigger (case-insensitive)
             if Config.WEBSITE_TRIGGER_MESSAGE.lower() in message_text.lower():
-                logger.info(f"✓ Website trigger detected in message: '{Config.WEBSITE_TRIGGER_MESSAGE}'")
+                logger.info(f"✓ Website trigger detected: '{Config.WEBSITE_TRIGGER_MESSAGE}'")
                 logger.info("→ Source: website (24-hour window)")
                 return Config.SOURCE_WEBSITE
 
+            # Check for Facebook Ads trigger (case-insensitive)
+            if Config.FACEBOOK_ADS_TRIGGER_MESSAGE.lower() in message_text.lower():
+                logger.info(f"✓ Facebook Ads trigger detected: '{Config.FACEBOOK_ADS_TRIGGER_MESSAGE}'")
+                logger.info("→ Source: facebook_ads (72-hour window - VERIFIED)")
+                return Config.SOURCE_FACEBOOK_ADS
+
             # ===== DEFAULT: Facebook Ads (72-hour window) =====
-            # All other contacts are assumed to be from Facebook Ads
-            logger.info("✓ No website trigger found")
+            # Contacts without specific triggers default to Facebook Ads
+            logger.info("✓ No specific trigger found")
             logger.info("→ Source: facebook_ads (72-hour window - DEFAULT)")
             return Config.SOURCE_FACEBOOK_ADS
 

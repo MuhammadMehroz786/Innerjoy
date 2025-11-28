@@ -74,12 +74,12 @@ class Config:
     SOURCE_FACEBOOK_ADS = 'facebook_ads'  # 72-hour window
     SOURCE_WEBSITE = 'website'  # 24-hour window
 
-    # Website Detection Trigger Message
-    # This is the pre-filled message that website visitors will send via Click-to-WhatsApp
-    # If the first message contains this phrase, contact is tagged as 'website' (24h window)
-    # Otherwise, contact is tagged as 'facebook_ads' (72h window)
-    # Using a natural phrase that fits into a normal greeting
+    # Source Detection Trigger Messages
+    # Website Detection: Pre-filled message from website Click-to-WhatsApp button
     WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'free Zoom preview link')
+
+    # Facebook Ads Detection: Pre-filled message from Facebook Ads Click-to-WhatsApp button
+    FACEBOOK_ADS_TRIGGER_MESSAGE = os.getenv('FACEBOOK_ADS_TRIGGER_MESSAGE', "I'm excited for the session")
 
     # Window Configuration (Meta WhatsApp Policy)
     WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days) - for Facebook Ads
