@@ -79,7 +79,7 @@ class Config:
     # If the first message contains this phrase, contact is tagged as 'website' (24h window)
     # Otherwise, contact is tagged as 'facebook_ads' (72h window)
     # Using a natural phrase that fits into a normal greeting
-    WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'from your website')
+    WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'free Zoom preview link')
 
     # Window Configuration (Meta WhatsApp Policy)
     WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days) - for Facebook Ads

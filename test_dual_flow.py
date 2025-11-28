@@ -66,7 +66,7 @@ try:
     test_result("Source Constants", True, f"FB Ads: {Config.SOURCE_FACEBOOK_ADS}, Website: {Config.SOURCE_WEBSITE}")
 
     # Check trigger message
-    assert Config.WEBSITE_TRIGGER_MESSAGE == 'from your website'
+    assert Config.WEBSITE_TRIGGER_MESSAGE == 'free Zoom preview link'
     test_result("Website Trigger", True, f"Trigger phrase: '{Config.WEBSITE_TRIGGER_MESSAGE}'")
 
     # Check window durations
@@ -100,7 +100,7 @@ webhook_website = {
         'firstName': 'TestUser'
     },
     'message': {
-        'text': 'Hi Ineke, I want to get the free Zoom link from your website 🌸',
+        'text': 'Hello, I would like to have the free Zoom preview link. Ineke',
         'type': 'text'
     }
 }
@@ -328,7 +328,7 @@ makecom_data = {
         'ID': 'msg_123',
         'Message': {
             'Type': 'text',
-            'Text': 'Hi Ineke, I want to get the free Zoom link from your website'
+            'Text': 'Hello, I would like to have the free Zoom preview link. Ineke'
         },
         'Timestamp': '2025-11-27T10:00:00Z'
     }
@@ -389,7 +389,7 @@ print("=" * 80)
 print("\n📋 DEPLOYMENT LINKS")
 print("=" * 80)
 print("Website Link (24h):")
-print("https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20want%20to%20get%20the%20free%20Zoom%20link%20from%20your%20website%20🌸")
+print("https://wa.me/8562022398887?text=Hello%2C%20I%20would%20like%20to%20have%20the%20free%20Zoom%20preview%20link.%20Ineke")
 print()
 print("Facebook Ads Link (72h):")
 print("https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20saw%20your%20ad")

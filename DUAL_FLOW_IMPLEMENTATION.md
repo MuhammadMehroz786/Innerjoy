@@ -53,10 +53,10 @@ Successfully implemented dual WhatsApp messaging window flow:
 
 ### Website Link (24-hour window)
 ```
-https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20want%20to%20get%20the%20free%20Zoom%20link%20from%20your%20website%20🌸
+https://wa.me/8562022398887?text=Hello%2C%20I%20would%20like%20to%20have%20the%20free%20Zoom%20preview%20link.%20Ineke
 ```
 
-**Trigger**: "from your website"
+**Trigger**: "free Zoom preview link"
 **Window**: 24 hours
 **Message**: B1_Z1_24H (name + all timeslots upfront)
 
@@ -65,7 +65,7 @@ https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20want%20to%20get%20the%20fre
 https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20saw%20your%20ad
 ```
 
-**Trigger**: No "from your website"
+**Trigger**: No "free Zoom preview link"
 **Window**: 72 hours
 **Message**: B1_Z1 (name only, then timeslots)
 
@@ -75,7 +75,7 @@ https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20saw%20your%20ad
 
 ### 1. Source Detection
 ```python
-IF message contains "from your website":
+IF message contains "free Zoom preview link":
     → Website lead (24h window)
 ELSE:
     → Facebook Ads lead (72h window) ✓ DEFAULT
@@ -164,8 +164,8 @@ This will add the new `contact_source` column.
 ### 2. Update Website Button
 Replace your innerjoy.live WhatsApp button with:
 ```html
-<a href="https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20want%20to%20get%20the%20free%20Zoom%20link%20from%20your%20website%20🌸">
-  Get Free Zoom Link 🌈
+<a href="https://wa.me/8562022398887?text=Hello%2C%20I%20would%20like%20to%20have%20the%20free%20Zoom%20preview%20link.%20Ineke">
+  Get Free Zoom Preview 🌈
 </a>
 ```
 
@@ -179,7 +179,7 @@ https://wa.me/8562022398887?text=Hi%20Ineke%2C%20I%20saw%20your%20ad
 Deploy the updated codebase to your server (Railway, Heroku, etc.)
 
 ### 5. Test Both Flows
-- Send test message with "from your website" → Should get B1_Z1_24H
+- Send test message with "free Zoom preview link" → Should get B1_Z1_24H
 - Send test message with "Hi" → Should get B1_Z1
 
 ---
@@ -220,7 +220,7 @@ Deploy the updated codebase to your server (Railway, Heroku, etc.)
 ## 🔍 Troubleshooting
 
 ### Issue: All contacts showing as 'facebook_ads'
-**Solution**: Check website button has "from your website" in the pre-filled text
+**Solution**: Check website button has "free Zoom preview link" in the pre-filled text
 
 ### Issue: Source changes after first message
 **Solution**: This shouldn't happen. Check logs for "✓ Existing contact - using stored source"
