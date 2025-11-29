@@ -162,6 +162,33 @@ class GoogleSheetsService:
             logger.error(f"Failed to initialize sheets: {error}")
             raise GoogleSheetsError(f"Sheet initialization failed: {error}")
 
+    def _append_row_safe(self, sheet, row_data):
+        """
+        Safely append a row to a sheet using update() instead of append_row()
+        This is a workaround for append_row() silently failing
+
+        Args:
+            sheet: The worksheet object
+            row_data: List of values to append
+        """
+        try:
+            # Get current row count
+            all_values = sheet.get_all_values()
+            next_row_num = len(all_values) + 1
+
+            # Calculate range (A to last column needed)
+            num_cols = len(row_data)
+            end_col = chr(64 + num_cols)  # A=65, so 64+1=A, 64+2=B, etc.
+            range_name = f'A{next_row_num}:{end_col}{next_row_num}'
+
+            # Use update() with RAW value input option
+            sheet.update(range_name=range_name, values=[row_data], value_input_option='RAW')
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to append row: {e}")
+            return False
+
     def _init_config_sheet(self):
         """Initialize Config sheet with default system variables"""
         try:
@@ -182,7 +209,9 @@ class GoogleSheetsService:
             # If only headers exist, add defaults
             if len(existing_rows) <= 1:
                 rows_to_add = [[key, value] for key, value in defaults.items()]
-                config_sheet.append_rows(rows_to_add)
+                # Use safe append for each row
+                for row in rows_to_add:
+                    self._append_row_safe(config_sheet, row)
                 logger.info("Initialized Config sheet with default values")
 
         except Exception as error:
@@ -224,9 +253,10 @@ class GoogleSheetsService:
                 datetime.now().isoformat()
             ]
 
-            self.sheets['Contacts'].append_row(row)
-            logger.info(f"Added contact {contact_data.get('contact_id')} ({contact_data.get('contact_source', 'facebook_ads')}) to Contacts sheet")
-            return True
+            success = self._append_row_safe(self.sheets['Contacts'], row)
+            if success:
+                logger.info(f"Added contact {contact_data.get('contact_id')} ({contact_data.get('contact_source', 'facebook_ads')}) to Contacts sheet")
+            return success
 
         except Exception as error:
             logger.error(f"Failed to add contact: {error}")
@@ -432,9 +462,13 @@ class GoogleSheetsService:
                 datetime.now().isoformat()
             ]
 
-            self.sheets['Scheduled_Messages'].append_row(row)
-            logger.info(f"Scheduled message {message_data.get('message_code')} for {message_data.get('contact_id')} at {message_data.get('scheduled_send_time')}")
-            return message_id
+            success = self._append_row_safe(self.sheets['Scheduled_Messages'], row)
+            if success:
+                logger.info(f"Scheduled message {message_data.get('message_code')} for {message_data.get('contact_id')} at {message_data.get('scheduled_send_time')}")
+                return message_id
+            else:
+                logger.error(f"Failed to schedule message {message_data.get('message_code')}")
+                return ''
 
         except Exception as error:
             logger.error(f"Failed to schedule message: {error}")
@@ -570,8 +604,8 @@ class GoogleSheetsService:
                 log_data.get('window_valid', 'Yes')
             ]
 
-            self.sheets['Message_Log'].append_row(row)
-            return True
+            success = self._append_row_safe(self.sheets['Message_Log'], row)
+            return success
 
         except Exception as error:
             logger.warning(f"Failed to log message: {error}")
@@ -601,9 +635,10 @@ class GoogleSheetsService:
                 csv_data.get('follow_up_sent_date', '')
             ]
 
-            self.sheets['CSV_Processing'].append_row(row)
-            logger.info(f"Added CSV record for {csv_data.get('contact_id')}")
-            return True
+            success = self._append_row_safe(self.sheets['CSV_Processing'], row)
+            if success:
+                logger.info(f"Added CSV record for {csv_data.get('contact_id')}")
+            return success
 
         except Exception as error:
             logger.error(f"Failed to add CSV record: {error}")
@@ -695,9 +730,10 @@ class GoogleSheetsService:
                     return True
 
             # Key not found, add new row
-            self.sheets['Config'].append_row([key, value])
-            logger.info(f"Added config {key} = {value}")
-            return True
+            success = self._append_row_safe(self.sheets['Config'], [key, value])
+            if success:
+                logger.info(f"Added config {key} = {value}")
+            return success
 
         except Exception as error:
             logger.error(f"Failed to set config value: {error}")
