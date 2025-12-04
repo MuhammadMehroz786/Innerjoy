@@ -181,8 +181,14 @@ class GoogleSheetsService:
             end_col = chr(64 + num_cols)  # A=65, so 64+1=A, 64+2=B, etc.
             range_name = f'A{next_row_num}:{end_col}{next_row_num}'
 
-            # Use update() with RAW value input option
-            sheet.update(range_name=range_name, values=[row_data], value_input_option='RAW')
+            # Use update() with positional arguments for better compatibility
+            # Different gspread versions have different signatures
+            try:
+                # Try newer gspread API (v5+)
+                sheet.update(range_name, [row_data], value_input_option='RAW')
+            except TypeError:
+                # Fallback to older API with keyword arguments
+                sheet.update(range_name=range_name, values=[row_data], value_input_option='RAW')
 
             return True
         except Exception as e:
