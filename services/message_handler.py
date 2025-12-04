@@ -309,11 +309,26 @@ class MessageHandler:
                 logger.info(f"Receiving name from {contact_identifier}")
                 return self._handle_name_response(contact_identifier, message_text)
 
-            # Check if this is a timeslot selection (A-D)
+            # Check if we're waiting for day selection (B1_Z2 response)
             message_upper = message_text.upper().strip()
-            if message_upper in ['A', 'B', 'C', 'D']:
-                logger.info(f"Timeslot selection detected: {message_upper}")
-                return self._handle_timeslot_selection(contact_identifier, sheet_contact, message_upper)
+            if current_step == 'B1_Z2':
+                if message_upper in ['S', 'U']:
+                    logger.info(f"Day selection detected: {message_upper}")
+                    return self._handle_day_selection(contact_identifier, sheet_contact, message_upper)
+                else:
+                    # Invalid day selection - send helpful error message
+                    logger.warning(f"Invalid day selection from {contact_identifier}: '{message_text}'")
+                    return self._handle_invalid_day_selection(contact_identifier, message_text)
+
+            # Check if we're waiting for time selection (B1_Z2A response)
+            if current_step == 'B1_Z2A':
+                if message_upper in ['A', 'B', 'C', 'D', 'E']:
+                    logger.info(f"Time selection detected: {message_upper}")
+                    return self._handle_time_selection(contact_identifier, sheet_contact, message_upper)
+                else:
+                    # Invalid time selection - send helpful error message
+                    logger.warning(f"Invalid time selection from {contact_identifier}: '{message_text}'")
+                    return self._handle_invalid_time_selection(contact_identifier, message_text)
 
             # Check if they said "I already attended" (Tree 2 re-entry)
             if 'already attended' in message_text.lower():
@@ -334,22 +349,16 @@ class MessageHandler:
     def _send_b1_z1(self, contact_identifier: str, contact_source: str = None):
         """
         Send B1 Z1 - Ask for name
-        Uses different message template based on contact source
+        All contacts now use the same message (24h window for all)
 
         Args:
             contact_identifier: Contact identifier
             contact_source: Contact source ('facebook_ads' or 'website')
         """
         try:
-            # Select appropriate template based on source
-            if contact_source == Config.SOURCE_WEBSITE:
-                # Website contacts get the 24h flow message (combined name + timeslots)
-                message = self.templates['B1_Z1_24H']
-                template_code = 'B1_Z1_24H'
-            else:
-                # Facebook Ads contacts get the 72h flow message (name only)
-                message = self.templates['B1_Z1']
-                template_code = 'B1_Z1'
+            # All contacts now get the same B1_Z1 message
+            message = self.templates['B1_Z1']
+            template_code = 'B1_Z1'
 
             self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
             self._log_message(contact_identifier, message, 'outbound', template_code)
@@ -423,15 +432,164 @@ class MessageHandler:
         except Exception as e:
             logger.error(f"Error sending B1_Z2: {e}")
 
+    def _handle_day_selection(self, contact_identifier: str, sheet_contact: Dict, day_code: str) -> bool:
+        """
+        Handle day selection (S or U)
+        This is Step 1 of two-step selection
+
+        Args:
+            contact_identifier: Contact identifier
+            sheet_contact: Contact data from sheets
+            day_code: Selected day (S or U)
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            first_name = sheet_contact.get('first_name', 'there')
+
+            # Save selected day to sheets
+            self._safe_sheets_operation(
+                lambda: self.sheets.update_contact(contact_identifier, {
+                    'selected_day': day_code,
+                    'current_step': 'B1_Z2A'  # Move to time selection step
+                }) if self.sheets else None
+            )
+
+            # Log the day selection
+            self._log_message(contact_identifier, day_code, 'inbound', 'DAY_SELECT')
+
+            # Send B1_Z2A - Ask for time
+            message = self.templates['B1_Z2A']
+            self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
+            self._log_message(contact_identifier, message, 'outbound', 'B1_Z2A')
+
+            logger.info(f"Day {day_code} selected for {contact_identifier}, sent B1_Z2A")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling day selection: {e}", exc_info=True)
+            return False
+
+    def _handle_time_selection(self, contact_identifier: str, sheet_contact: Dict, time_code: str) -> bool:
+        """
+        Handle time selection (A, B, C, D, or E)
+        This is Step 2 of two-step selection
+        Combines with previously selected day to form full timeslot code
+
+        Args:
+            contact_identifier: Contact identifier
+            sheet_contact: Contact data from sheets
+            time_code: Selected time (A, B, C, D, E)
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            first_name = sheet_contact.get('first_name', 'there')
+            selected_day = sheet_contact.get('selected_day', 'S')  # Default to Saturday if not found
+
+            # Combine day + time to form full timeslot code (e.g., "SA", "UB")
+            full_timeslot = selected_day + time_code
+
+            # Validate the combined timeslot exists
+            if full_timeslot not in Config.TIME_SLOTS:
+                logger.error(f"Invalid timeslot combination: {full_timeslot}")
+                return False
+
+            # Now proceed with the standard timeslot confirmation flow
+            return self._handle_timeslot_selection(contact_identifier, sheet_contact, full_timeslot)
+
+        except Exception as e:
+            logger.error(f"Error handling time selection: {e}", exc_info=True)
+            return False
+
+    def _handle_invalid_day_selection(self, contact_identifier: str, invalid_input: str) -> bool:
+        """
+        Handle invalid day selection (user didn't send S or U)
+        Send helpful error message and keep them in B1_Z2 step
+
+        Args:
+            contact_identifier: Contact identifier
+            invalid_input: What the user actually sent
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            # Log the invalid input
+            self._log_message(contact_identifier, invalid_input, 'inbound', 'INVALID_DAY')
+
+            # Send helpful error message
+            error_message = """I didn't quite catch that 🌸
+
+Please choose your preferred day:
+
+S = Saturday
+U = Sunday
+
+Reply with just S or U"""
+
+            self.api.send_message(contact_identifier, error_message, channel_id=self.channel_id)
+            self._log_message(contact_identifier, error_message, 'outbound', 'ERROR_INVALID_DAY')
+
+            # Keep them in B1_Z2 step (don't change current_step)
+            logger.info(f"Sent invalid day error message to {contact_identifier}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling invalid day selection: {e}", exc_info=True)
+            return False
+
+    def _handle_invalid_time_selection(self, contact_identifier: str, invalid_input: str) -> bool:
+        """
+        Handle invalid time selection (user didn't send A-E)
+        Send helpful error message and keep them in B1_Z2A step
+
+        Args:
+            contact_identifier: Contact identifier
+            invalid_input: What the user actually sent
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            # Log the invalid input
+            self._log_message(contact_identifier, invalid_input, 'inbound', 'INVALID_TIME')
+
+            # Send helpful error message
+            error_message = """I didn't quite catch that 🌸
+
+Please choose your preferred time (UTC+7):
+
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
+
+Reply with just A, B, C, D or E"""
+
+            self.api.send_message(contact_identifier, error_message, channel_id=self.channel_id)
+            self._log_message(contact_identifier, error_message, 'outbound', 'ERROR_INVALID_TIME')
+
+            # Keep them in B1_Z2A step (don't change current_step)
+            logger.info(f"Sent invalid time error message to {contact_identifier}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling invalid time selection: {e}", exc_info=True)
+            return False
+
     def _handle_timeslot_selection(self, contact_identifier: str, sheet_contact: Dict, timeslot: str) -> bool:
         """
-        Handle timeslot selection (A, B, C, or D)
+        Handle final timeslot selection (after day+time combination)
         This is B1 Z2a1 - Confirm slot + send invite card
 
         Args:
             contact_identifier: Contact identifier
             sheet_contact: Contact data from sheets
-            timeslot: Selected timeslot (A, B, C, D)
+            timeslot: Full timeslot code (SA, SB, SC, SD, SE, UA, UB, UC, UD, UE)
 
         Returns:
             True if handled successfully

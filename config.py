@@ -26,8 +26,8 @@ class Config:
     GOOGLE_SHEETS_ID = os.getenv('GOOGLE_SHEETS_ID')
     GOOGLE_CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
 
-    # Timezone Configuration (UTC+8 for Singapore & Hong Kong)
-    TIMEZONE = os.getenv('TIMEZONE', 'Asia/Singapore')
+    # Timezone Configuration (UTC+7 for Bangkok & Laos)
+    TIMEZONE = os.getenv('TIMEZONE', 'Asia/Bangkok')
 
     # Zoom Configuration
     ZOOM_PREVIEW_LINK = os.getenv('ZOOM_PREVIEW_LINK', 'https://us02web.zoom.us/j/82349172983')
@@ -38,12 +38,38 @@ class Config:
     MEMBERSHIP_PRICE = int(os.getenv('MEMBERSHIP_PRICE', 80))
     TRIAL_PRICE = int(os.getenv('TRIAL_PRICE', 12))
 
-    # Session Time Slots (UTC+8 - Singapore & Hong Kong)
+    # Session Time Slots (UTC+7 - Bangkok & Laos)
+    # Two-step selection: Day (S/U) + Time (A/B/C/D/E)
+    # Saturday sessions: 15:30, 19:30, 20:00, 20:30, 21:00
+    # Sunday sessions: 15:30, 19:30, 20:00, 20:30, 21:00
     TIME_SLOTS = {
-        'A': {'day': 'Saturday', 'time': time(15, 30), 'day_num': 5, 'is_walkin': False},  # Saturday 15:30
-        'B': {'day': 'Saturday', 'time': time(19, 30), 'day_num': 5, 'is_walkin': True, 'end_time': time(21, 30)},  # Saturday 19:30-21:30 (walk-in)
-        'C': {'day': 'Sunday', 'time': time(15, 30), 'day_num': 6, 'is_walkin': False},    # Sunday 15:30
-        'D': {'day': 'Sunday', 'time': time(19, 30), 'day_num': 6, 'is_walkin': True, 'end_time': time(21, 30)}     # Sunday 19:30-21:30 (walk-in)
+        # Saturday slots
+        'SA': {'day': 'Saturday', 'time': time(15, 30), 'day_num': 5},  # Saturday 15:30
+        'SB': {'day': 'Saturday', 'time': time(19, 30), 'day_num': 5},  # Saturday 19:30
+        'SC': {'day': 'Saturday', 'time': time(20, 0), 'day_num': 5},   # Saturday 20:00
+        'SD': {'day': 'Saturday', 'time': time(20, 30), 'day_num': 5},  # Saturday 20:30
+        'SE': {'day': 'Saturday', 'time': time(21, 0), 'day_num': 5},   # Saturday 21:00
+        # Sunday slots
+        'UA': {'day': 'Sunday', 'time': time(15, 30), 'day_num': 6},    # Sunday 15:30
+        'UB': {'day': 'Sunday', 'time': time(19, 30), 'day_num': 6},    # Sunday 19:30
+        'UC': {'day': 'Sunday', 'time': time(20, 0), 'day_num': 6},     # Sunday 20:00
+        'UD': {'day': 'Sunday', 'time': time(20, 30), 'day_num': 6},    # Sunday 20:30
+        'UE': {'day': 'Sunday', 'time': time(21, 0), 'day_num': 6}      # Sunday 21:00
+    }
+
+    # Day selection mapping (Step 1)
+    DAY_SELECTION = {
+        'S': 'Saturday',
+        'U': 'Sunday'
+    }
+
+    # Time selection mapping (Step 2)
+    TIME_SELECTION = {
+        'A': time(15, 30),
+        'B': time(19, 30),
+        'C': time(20, 0),
+        'D': time(20, 30),
+        'E': time(21, 0)
     }
 
     # Timing Configuration (in minutes)
@@ -71,21 +97,19 @@ class Config:
     NOSALES_NOSHOW_HOLD_WEEKS = 6  # Hold for 5-6 weeks (waiting for Tier 2 approval)
 
     # Contact Source Types
-    SOURCE_FACEBOOK_ADS = 'facebook_ads'  # 72-hour window
+    SOURCE_FACEBOOK_ADS = 'facebook_ads'  # 24-hour window (Meta policy update)
     SOURCE_WEBSITE = 'website'  # 24-hour window
 
     # Source Detection Trigger Messages
     # Facebook Ads Detection: Pre-filled message from Facebook Ads Click-to-WhatsApp button
-    # If this message is detected in the first contact message → 72-hour window
     FACEBOOK_ADS_TRIGGER_MESSAGE = os.getenv('FACEBOOK_ADS_TRIGGER_MESSAGE', "I'm excited for the session")
 
     # Website Trigger: Optional reference (not used for detection)
-    # All contacts WITHOUT the Facebook Ads trigger → 24-hour window (website/outside leads)
     WEBSITE_TRIGGER_MESSAGE = os.getenv('WEBSITE_TRIGGER_MESSAGE', 'free Zoom preview link')
 
     # Window Configuration (Meta WhatsApp Policy)
-    WINDOW_72H_SECONDS = 259200  # 72 hours in seconds (3 days) - for Facebook Ads
-    WINDOW_24H_SECONDS = 86400   # 24 hours in seconds - for Website/FB Page
+    # NOTE: ALL contacts now use 24-hour window per Meta's customer care policy
+    WINDOW_24H_SECONDS = 86400   # 24 hours in seconds - for ALL contacts
 
     # Respond.io Custom Field Names
     CUSTOM_FIELDS = {
@@ -112,88 +136,49 @@ class Config:
     @staticmethod
     def get_message_templates():
         return {
-            # ========== 72-HOUR WINDOW MESSAGES (Facebook Ads Contacts) ==========
+            # ========== B1 Z1 - Ask Name ==========
+            'B1_Z1': "Hi 🌸 I'm Ineke from InnerJoy!\nLovely to connect with you.\nCan you share your (first) name?\nThen I'll send your Zoom link 🌈",
 
-            # B1 Z1 - Ask Name (72h flow)
-            'B1_Z1': "Hi 🌸 I'm Ineke from InnerJoy! Lovely to connect with you. Can you share your (first) name? Then I'll send your Zoom link 🌈",
-
-            # ========== 24-HOUR WINDOW MESSAGES (Website/FB Page Contacts) ==========
-
-            # B1 Z1 - Ask Name (24h flow - combined with timeslot info)
-            'B1_Z1_24H': """Hi 🌸 I'm Ineke from InnerJoy!
-Lovely to connect with you.
-Please share your first name and
-I'll send your free Zoom preview link 🌈
-
-These are our free
-Renew Your Inner Joy
-Zoom preview sessions
-this weekend (UTC+8):
-
-A — Sat 15:30 (30 min)
-B — Sat 19:30–21:30 (walk-in)
-C — Sun 15:30 (30 min)
-D — Sun 19:30–21:30 (walk-in)
-
-Please share your first name and
-I'll send your free Zoom preview link 🌈""",
-
-            # B1 Z2 - Send Zoom Link + Ask Timeslot
-            'B1_Z2': """Hey {name} 🌸
-
-Here is your Zoom link 🌈
-
+            # B1 Z2 - Send Zoom Link + Ask Day
+            'B1_Z2': """Hey {name}
+Here is your Zoom link
 {zoom_link}
 
-
-
 If Zoom is new for you,
-
 download it here:
-
 {zoom_download_link}
 
-
-
-We host free walk-in
-
+We host free
 preview sessions this
-
-weekend for SG & HK (UTC+8).
+weekend (UTC+7).
 
 These are Renew Your Inner Joy
+preview sessions in 30 min. you
+experience the uplifting energy
 
-preview sessions ✨
+Choose your preferred day:
 
-Join 20–30 mins anytime
+S = Saturday
+U = Sunday
 
-in this timeframe to feel the uplifting energy 💛
+Reply S or U""",
 
+            # B1 Z2a - Ask Preferred Time (NEW - Step 2)
+            'B1_Z2A': """Great! Now choose your preferred time (UTC+7):
 
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
 
-Choose your option 👇
-
-
-
-A = Sat 15:30
-
-B = Sat 19:30–21:30 (walk-in)
-
-C = Sun 15:30
-
-D = Sun 19:30–21:30 (walk-in)
-
-
-
-All times in UTC+8 ⏰
-
-Reply A, B, C or D 💫""",
+Reply A, B, C, D or E""",
 
             # B1 Z2a1 - Confirm Timeslot
             'B1_Z2A1': """Hey {name} 💖
 Great — you're on the list!
 🕒 Your chosen time:
-{timeslot} 🌈
+{timeslot} 🌈 (UTC+7)
 
 When you'd love to share
 this moment of Joy
@@ -223,32 +208,10 @@ Warm greetings,
 {sender_name}""",
 
             # B1 R1 - Reminder T-12 hours
-            'B1_R1': """Hello {name} 🌸
-Just a gentle reminder —
-your "Renew your Inner Joy"
-Zoom preview is coming soon ✨
-
-🕒 Your session starts at
-{timeslot} (UTC+8)
-
-I'm so happy you're joining!
-Can't wait to see you soon!
-Ineke – Inner Joy""",
+            'B1_R1': """🕒 Your session starts at {timeslot}""",
 
             # B1 R2 - Reminder T-60 minutes
-            'B1_R2': """Hello {name} 🌸
-
-We're gathering soon for
-"Renew your Inner Joy"
-
-🕒 Starts at {timeslot} (UTC+8)
-
-Here's your join link 👇
-{zoom_link}
-
-I'm so happy you're joining!
-Can't wait to see you soon!
-Ineke – Inner Joy""",
+            'B1_R2': """🕒 Starts at {timeslot}""",
 
             # B1 R3 - Reminder T-10 minutes
             'B1_R3': """Hi {name} 🌼
@@ -346,7 +309,7 @@ Renew Your Inner Joy ✨
 This Zoom link gives you
 full access Monday to Friday —
 daily live 20-minute sessions
-at 20:00 / 20:30 (UTC+8)
+at 20:00 / 20:30 (UTC+7)
 
 This week's Zoom link:
 {member_zoom_link}
@@ -374,7 +337,7 @@ the full 3-month membership.
 This Zoom link gives you
 full access Monday to Friday —
 daily live 20-minute sessions
-at 20:00 / 20:30 (UTC+8)
+at 20:00 / 20:30 (UTC+7)
 
 This week's Zoom link:
 {member_zoom_link}
@@ -399,23 +362,20 @@ and a smile 😄
 Free Zoom preview session link:
 {zoom_link}
 
-Choose your option 👇
+Which day + time fits you best?
 
+Day:
+S = Saturday
+U = Sunday
 
+Time (UTC+7):
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
 
-A = Sat 15:30
-
-B = Sat 19:30–21:30 (walk-in)
-
-C = Sun 15:30
-
-D = Sun 19:30–21:30 (walk-in)
-
-
-
-All times in UTC+8 ⏰
-
-Reply A, B, C or D
+Reply S and then A–E
 
 
 
@@ -441,23 +401,20 @@ and a smile 😄
 Free Zoom preview session link:
 {zoom_link}
 
-Choose your option 👇
+Which day + time fits you best?
 
+Day:
+S = Saturday
+U = Sunday
 
+Time (UTC+7):
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
 
-A = Sat 15:30
-
-B = Sat 19:30–21:30 (walk-in)
-
-C = Sun 15:30
-
-D = Sun 19:30–21:30 (walk-in)
-
-
-
-All times in UTC+8 ⏰
-
-Reply A, B, C or D
+Reply S and then A–E
 
 
 
@@ -473,22 +430,19 @@ Here's your free Zoom link 🌈
 {zoom_link}
 
 Which day + time fits you best?
-Choose your letter below 👇
 
-A = Sat 15:30
+Day:
+S = Saturday
+U = Sunday
 
-B = Sat 19:30–21:30 (walk-in)
+Time (UTC+7):
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
 
-C = Sun 15:30
-
-D = Sun 19:30–21:30 (walk-in)
-
-
-
-All times in UTC+8 ⏰
-
-Reply A, B, C or D 💫
-
+Reply S and then A–E
 Or: I already attended""",
 
             # B2 Rb - No Timeslot Preference Reminder (2 hours after B2 Ra)
@@ -497,19 +451,19 @@ Here's your free Zoom link
 {zoom_link}
 
 Which day + time fits you best?
-Choose your letter below 👇
 
-A = Sat 15:30
+Day:
+S = Saturday
+U = Sunday
 
-B = Sat 19:30–21:30 (walk-in)
+Time (UTC+7):
+A = 15:30
+B = 19:30
+C = 20:00
+D = 20:30
+E = 21:00
 
-C = Sun 15:30
-
-D = Sun 19:30–21:30 (walk-in)
-
-All times in UTC+8 ⏰
-
-Reply A, B, C or D""",
+Reply S and then A–E""",
 
             # B2 S1 - Sales Offer 1 (Sunday afternoon 16:00)
             'B2_S1': """Hey {name}! 🌸
@@ -551,13 +505,13 @@ only $80 for full access:
     @staticmethod
     def get_timeslot_display(timeslot: str) -> str:
         """
-        Get display text for a timeslot (e.g., 'Saturday 15:30' or 'Saturday 19:30-21:30 (walk-in)')
+        Get display text for a timeslot (e.g., 'Saturday 15:30 (UTC+7)')
 
         Args:
-            timeslot: Timeslot letter (A, B, C, D)
+            timeslot: Timeslot code (SA, SB, SC, SD, SE, UA, UB, UC, UD, UE)
 
         Returns:
-            Display text for the timeslot
+            Display text for the timeslot with UTC+7
         """
         if timeslot not in Config.TIME_SLOTS:
             return ''
@@ -567,14 +521,7 @@ only $80 for full access:
         time_obj = slot_info['time']
         time_str = time_obj.strftime('%H:%M')
 
-        # Check if this is a walk-in slot
-        if slot_info.get('is_walkin', False):
-            end_time = slot_info.get('end_time')
-            if end_time:
-                end_time_str = end_time.strftime('%H:%M')
-                return f"{day} {time_str}–{end_time_str} (walk-in)"
-
-        return f"{day} {time_str}"
+        return f"{day} {time_str} (UTC+7)"
 
     @staticmethod
     def get_window_duration(contact_source: str) -> int:
@@ -585,15 +532,10 @@ only $80 for full access:
             contact_source: Contact source ('facebook_ads' or 'website')
 
         Returns:
-            Window duration in hours (72 for facebook_ads, 24 for website)
+            Window duration in hours (24 for ALL contacts per Meta policy)
         """
-        if contact_source == Config.SOURCE_FACEBOOK_ADS:
-            return 72  # 72-hour window for Facebook Ads
-        elif contact_source == Config.SOURCE_WEBSITE:
-            return 24  # 24-hour window for Website/FB Page
-        else:
-            # Default to 24-hour window for unknown sources (conservative)
-            return 24
+        # ALL contacts now use 24-hour window per Meta's customer care policy
+        return 24
 
     @staticmethod
     def validate_config():

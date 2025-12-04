@@ -265,7 +265,8 @@ class RespondAPI:
 
     def check_72hr_window(self, contact_id: str) -> bool:
         """
-        Check if contact is within 72-hour messaging window (Meta WhatsApp Policy)
+        Check if contact is within 24-hour messaging window (Meta WhatsApp Policy)
+        Note: Method name kept for backwards compatibility, but now uses 24h window
 
         Args:
             contact_id: Respond.io contact ID
@@ -275,22 +276,22 @@ class RespondAPI:
         """
         last_window_start = self.get_contact_field(
             contact_id,
-            Config.CUSTOM_FIELDS['LAST_72HR_WINDOW']
+            Config.CUSTOM_FIELDS['LAST_72HR_WINDOW']  # Field name kept for compatibility
         )
 
         if not last_window_start:
-            logger.warning(f"No 72hr window timestamp for contact {contact_id}")
+            logger.warning(f"No window timestamp for contact {contact_id}")
             return False
 
         try:
             window_start = datetime.fromisoformat(last_window_start)
             time_elapsed = (datetime.now() - window_start).total_seconds()
 
-            within_window = time_elapsed < Config.WINDOW_72H_SECONDS
+            within_window = time_elapsed < Config.WINDOW_24H_SECONDS
 
             if not within_window:
                 logger.warning(
-                    f"Contact {contact_id} is outside 72hr window "
+                    f"Contact {contact_id} is outside 24hr window "
                     f"(elapsed: {time_elapsed/3600:.2f} hours)"
                 )
 
@@ -314,17 +315,18 @@ class RespondAPI:
         # Just call the 72hr version now
         return self.check_72hr_window(contact_id)
 
-    def update_window(self, contact_id: str, window_hours: int = 72) -> Dict:
+    def update_window(self, contact_id: str, window_hours: int = 24) -> Dict:
         """
         Update the messaging window timestamp for a contact (Meta WhatsApp Policy)
         Called when contact sends a message
 
         NOTE: This now only logs - actual storage is in Google Sheets only.
         We skip Respond.io field updates to avoid 400 errors with phone:+number format.
+        All contacts now use 24-hour window per Meta's customer care policy.
 
         Args:
             contact_id: Respond.io contact ID
-            window_hours: Window duration in hours (72 for Facebook Ads, 24 for Website)
+            window_hours: Window duration in hours (24 for all contacts)
 
         Returns:
             Empty dict (no actual API call made)
@@ -337,10 +339,11 @@ class RespondAPI:
 
     def update_72hr_window(self, contact_id: str) -> Dict:
         """
-        Update the 72-hour window timestamp for a contact (Meta WhatsApp Policy)
+        Update the messaging window timestamp for a contact (Meta WhatsApp Policy)
         Called when contact sends a message
 
-        NOTE: Legacy method - use update_window() instead
+        NOTE: Legacy method name - now uses 24h window for all contacts
+        Use update_window() instead
 
         Args:
             contact_id: Respond.io contact ID
@@ -348,7 +351,7 @@ class RespondAPI:
         Returns:
             Empty dict (no actual API call made)
         """
-        return self.update_window(contact_id, 72)
+        return self.update_window(contact_id, 24)
 
     def update_24hr_window(self, contact_id: str) -> Dict:
         """
@@ -367,7 +370,7 @@ class RespondAPI:
 
     def send_message_with_window_check(self, contact_id: str, message: str) -> bool:
         """
-        Send message only if within 72-hour window
+        Send message only if within 24-hour window (Meta WhatsApp customer care policy)
 
         Args:
             contact_id: Respond.io contact ID
@@ -377,7 +380,7 @@ class RespondAPI:
             True if message sent successfully, False otherwise
         """
         if not self.check_72hr_window(contact_id):
-            logger.error(f"Cannot send message to {contact_id}: outside 72hr window")
+            logger.error(f"Cannot send message to {contact_id}: outside 24hr window")
             return False
 
         try:
