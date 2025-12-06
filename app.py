@@ -104,17 +104,45 @@ def webhook_respond():
         try:
             data = request.get_json(force=True)
         except Exception as json_error:
-            logger.error(f"JSON parse error: {json_error}")
-            logger.error(f"Error type: {type(json_error).__name__}")
-            logger.error(f"Content-Type: {request.content_type}")
-            logger.error(f"Raw data (first 500 chars): {raw_data[:500]}")
-            logger.error(f"Raw bytes (hex, first 100): {raw_bytes[:100].hex()}")
-            return jsonify({
-                'error': 'Invalid JSON format',
-                'details': str(json_error),
-                'content_type': request.content_type,
-                'data_preview': raw_data[:200]
-            }), 400
+            # If JSON parsing fails, try to fix common issues from Make.com
+            logger.warning(f"Initial JSON parse failed, attempting to fix: {json_error}")
+            try:
+                import json
+                import re
+
+                # Fix literal newlines in JSON string values
+                # Replace unescaped newlines with escaped ones
+                # This regex finds strings and escapes newlines within them
+                def fix_newlines_in_strings(match):
+                    string_content = match.group(0)
+                    # Replace literal newlines with \n
+                    fixed = string_content.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                    return fixed
+
+                # Fix the JSON by escaping control characters in string values
+                fixed_data = raw_data
+                # Simple approach: replace all literal newlines with escaped newlines
+                # Be careful not to break the JSON structure itself
+                fixed_data = fixed_data.replace('\\n', '\\\\n')  # First, protect already escaped newlines
+                fixed_data = fixed_data.replace('\n', '\\n')      # Then escape literal newlines
+                fixed_data = fixed_data.replace('\\\\n', '\\n')  # Restore the protected ones
+                fixed_data = fixed_data.replace('\r', '\\r')      # Escape carriage returns
+                fixed_data = fixed_data.replace('\t', '\\t')      # Escape tabs
+
+                data = json.loads(fixed_data)
+                logger.info("Successfully parsed JSON after fixing newlines")
+            except Exception as retry_error:
+                logger.error(f"JSON parse error (final): {retry_error}")
+                logger.error(f"Error type: {type(retry_error).__name__}")
+                logger.error(f"Content-Type: {request.content_type}")
+                logger.error(f"Raw data (first 500 chars): {raw_data[:500]}")
+                logger.error(f"Raw bytes (hex, first 100): {raw_bytes[:100].hex()}")
+                return jsonify({
+                    'error': 'Invalid JSON format',
+                    'details': str(retry_error),
+                    'content_type': request.content_type,
+                    'data_preview': raw_data[:200]
+                }), 400
 
         if not data:
             logger.warning("Received empty webhook data")
