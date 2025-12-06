@@ -110,24 +110,58 @@ def webhook_respond():
                 import json
                 import re
 
-                # Fix literal newlines in JSON string values
-                # Replace unescaped newlines with escaped ones
-                # This regex finds strings and escapes newlines within them
-                def fix_newlines_in_strings(match):
-                    string_content = match.group(0)
-                    # Replace literal newlines with \n
-                    fixed = string_content.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
-                    return fixed
+                # Fix literal newlines ONLY inside JSON string values
+                # This regex finds string values and escapes control characters within them
+                def fix_string_escapes(match):
+                    # match.group(1) is the content between quotes
+                    string_content = match.group(1)
+                    # Escape control characters
+                    fixed = (string_content
+                             .replace('\\', '\\\\')   # Escape backslashes first
+                             .replace('\n', '\\n')    # Escape newlines
+                             .replace('\r', '\\r')    # Escape carriage returns
+                             .replace('\t', '\\t')    # Escape tabs
+                             .replace('"', '\\"'))    # Escape quotes
+                    return f'"{fixed}"'
 
-                # Fix the JSON by escaping control characters in string values
-                fixed_data = raw_data
-                # Simple approach: replace all literal newlines with escaped newlines
-                # Be careful not to break the JSON structure itself
-                fixed_data = fixed_data.replace('\\n', '\\\\n')  # First, protect already escaped newlines
-                fixed_data = fixed_data.replace('\n', '\\n')      # Then escape literal newlines
-                fixed_data = fixed_data.replace('\\\\n', '\\n')  # Restore the protected ones
-                fixed_data = fixed_data.replace('\r', '\\r')      # Escape carriage returns
-                fixed_data = fixed_data.replace('\t', '\\t')      # Escape tabs
+                # Pattern to match JSON string values (content between quotes)
+                # This handles strings that might contain unescaped characters
+                string_pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
+
+                # For safety, use a simpler approach:
+                # Parse character by character, tracking if we're inside a string
+                fixed_chars = []
+                in_string = False
+                escape_next = False
+
+                for i, char in enumerate(raw_data):
+                    if escape_next:
+                        fixed_chars.append(char)
+                        escape_next = False
+                        continue
+
+                    if char == '\\':
+                        escape_next = True
+                        fixed_chars.append(char)
+                        continue
+
+                    if char == '"':
+                        in_string = not in_string
+                        fixed_chars.append(char)
+                        continue
+
+                    if in_string and char == '\n':
+                        # Replace literal newline with escaped version
+                        fixed_chars.append('\\n')
+                    elif in_string and char == '\r':
+                        fixed_chars.append('\\r')
+                    elif in_string and char == '\t':
+                        fixed_chars.append('\\t')
+                    else:
+                        fixed_chars.append(char)
+
+                fixed_data = ''.join(fixed_chars)
+                logger.info(f"Fixed JSON data (first 200 chars): {fixed_data[:200]}")
 
                 data = json.loads(fixed_data)
                 logger.info("Successfully parsed JSON after fixing newlines")
