@@ -106,7 +106,7 @@ class GoogleSheetsService:
             # Contacts sheet headers
             contacts_headers = [
                 'contact_id', 'phone', 'first_name', 'contact_source', 'current_tree', 'current_step',
-                'registration_time', 'chosen_timeslot', 'session_datetime',
+                'selected_day', 'registration_time', 'chosen_timeslot', 'session_datetime',
                 'last_inbound_msg_time', 'window_expires_at', 'thumbs_up_received',
                 'payment_status', 'member_type', 'trial_start', 'trial_end',
                 'attended_status', 'csv_follow_up_group', 'tier2_approved', 'last_updated'
@@ -243,6 +243,7 @@ class GoogleSheetsService:
                 contact_data.get('contact_source', 'facebook_ads'),  # Default to facebook_ads
                 contact_data.get('current_tree', 'Tree1'),
                 contact_data.get('current_step', 'B1_Z1'),
+                contact_data.get('selected_day', ''),
                 contact_data.get('registration_time', datetime.now().isoformat()),
                 contact_data.get('chosen_timeslot', ''),
                 contact_data.get('session_datetime', ''),
@@ -293,20 +294,21 @@ class GoogleSheetsService:
                 'contact_source': 4,
                 'current_tree': 5,
                 'current_step': 6,
-                'registration_time': 7,
-                'chosen_timeslot': 8,
-                'session_datetime': 9,
-                'last_inbound_msg_time': 10,
-                'window_expires_at': 11,
-                'thumbs_up_received': 12,
-                'payment_status': 13,
-                'member_type': 14,
-                'trial_start': 15,
-                'trial_end': 16,
-                'attended_status': 17,
-                'csv_follow_up_group': 18,
-                'tier2_approved': 19,
-                'last_updated': 20
+                'selected_day': 7,
+                'registration_time': 8,
+                'chosen_timeslot': 9,
+                'session_datetime': 10,
+                'last_inbound_msg_time': 11,
+                'window_expires_at': 12,
+                'thumbs_up_received': 13,
+                'payment_status': 14,
+                'member_type': 15,
+                'trial_start': 16,
+                'trial_end': 17,
+                'attended_status': 18,
+                'csv_follow_up_group': 19,
+                'tier2_approved': 20,
+                'last_updated': 21
             }
 
             # Update last_updated timestamp
@@ -373,20 +375,21 @@ class GoogleSheetsService:
                 'contact_source': row[3] if len(row) > 3 else 'facebook_ads',
                 'current_tree': row[4] if len(row) > 4 else 'Tree1',
                 'current_step': row[5] if len(row) > 5 else '',
-                'registration_time': row[6] if len(row) > 6 else '',
-                'chosen_timeslot': row[7] if len(row) > 7 else '',
-                'session_datetime': row[8] if len(row) > 8 else '',
-                'last_inbound_msg_time': row[9] if len(row) > 9 else '',
-                'window_expires_at': row[10] if len(row) > 10 else '',
-                'thumbs_up_received': row[11] if len(row) > 11 else 'No',
-                'payment_status': row[12] if len(row) > 12 else 'None',
-                'member_type': row[13] if len(row) > 13 else '',
-                'trial_start': row[14] if len(row) > 14 else '',
-                'trial_end': row[15] if len(row) > 15 else '',
-                'attended_status': row[16] if len(row) > 16 else '',
-                'csv_follow_up_group': row[17] if len(row) > 17 else '',
-                'tier2_approved': row[18] if len(row) > 18 else 'No',
-                'last_updated': row[19] if len(row) > 19 else ''
+                'selected_day': row[6] if len(row) > 6 else '',
+                'registration_time': row[7] if len(row) > 7 else '',
+                'chosen_timeslot': row[8] if len(row) > 8 else '',
+                'session_datetime': row[9] if len(row) > 9 else '',
+                'last_inbound_msg_time': row[10] if len(row) > 10 else '',
+                'window_expires_at': row[11] if len(row) > 11 else '',
+                'thumbs_up_received': row[12] if len(row) > 12 else 'No',
+                'payment_status': row[13] if len(row) > 13 else 'None',
+                'member_type': row[14] if len(row) > 14 else '',
+                'trial_start': row[15] if len(row) > 15 else '',
+                'trial_end': row[16] if len(row) > 16 else '',
+                'attended_status': row[17] if len(row) > 17 else '',
+                'csv_follow_up_group': row[18] if len(row) > 18 else '',
+                'tier2_approved': row[19] if len(row) > 19 else 'No',
+                'last_updated': row[20] if len(row) > 20 else ''
             }
 
             return contact_data
