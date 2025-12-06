@@ -94,16 +94,27 @@ def webhook_respond():
     try:
         # Log raw data for debugging
         raw_data = request.get_data(as_text=True)
+        raw_bytes = request.get_data()
         logger.info(f"Raw webhook data from Make.com: {raw_data}")
+        logger.info(f"Raw bytes length: {len(raw_bytes)}")
+        logger.info(f"Content-Type: {request.content_type}")
+        logger.info(f"Content-Length: {request.content_length}")
 
         # Try to parse JSON
         try:
             data = request.get_json(force=True)
         except Exception as json_error:
             logger.error(f"JSON parse error: {json_error}")
+            logger.error(f"Error type: {type(json_error).__name__}")
             logger.error(f"Content-Type: {request.content_type}")
-            logger.error(f"Raw data: {raw_data}")
-            return jsonify({'error': 'Invalid JSON format'}), 400
+            logger.error(f"Raw data (first 500 chars): {raw_data[:500]}")
+            logger.error(f"Raw bytes (hex, first 100): {raw_bytes[:100].hex()}")
+            return jsonify({
+                'error': 'Invalid JSON format',
+                'details': str(json_error),
+                'content_type': request.content_type,
+                'data_preview': raw_data[:200]
+            }), 400
 
         if not data:
             logger.warning("Received empty webhook data")
