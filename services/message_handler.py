@@ -335,25 +335,32 @@ class MessageHandler:
         # Fallback: Simple extraction with pattern matching
         text = message_text.strip().lower()
 
-        # Handle common patterns
+        # Handle common patterns (check anywhere in text, not just start)
         patterns = [
-            ("i'm ", "i'm "),
-            ("i am ", "i am "),
-            ("my name is ", "my name is "),
-            ("call me ", "call me "),
-            ("this is ", "this is "),
-            ("im ", "im "),
+            " i'm ",
+            " i am ",
+            " my name is ",
+            " call me ",
+            " this is ",
+            " im ",
+            "i'm ",  # Also check at start
+            "i am ",
+            "im ",
         ]
 
-        for pattern, _ in patterns:
-            if text.startswith(pattern):
+        for pattern in patterns:
+            if pattern in text:
+                # Find where the pattern is
+                idx = text.find(pattern)
                 # Extract text after the pattern
-                name_part = message_text[len(pattern):].strip()
-                words = name_part.split()
+                after_pattern = message_text[idx + len(pattern):].strip()
+                words = after_pattern.split()
                 if words:
                     first_name = words[0].strip().capitalize()
+                    # Remove punctuation from name
+                    first_name = first_name.rstrip('.,!?')
                     if any(c.isalpha() for c in first_name):
-                        logger.info(f"Pattern matched: '{pattern}' → {first_name}")
+                        logger.info(f"Pattern matched: '{pattern.strip()}' → {first_name}")
                         return first_name
 
         # Default: Take first word
