@@ -21,7 +21,8 @@ class OpenAIService:
     def generate_response(self,
                          message_type: str,
                          context: Dict,
-                         user_message: Optional[str] = None) -> str:
+                         user_message: Optional[str] = None,
+                         conversation_history: Optional[list] = None) -> str:
         """
         Generate a natural response based on the message type and context
 
@@ -29,22 +30,30 @@ class OpenAIService:
             message_type: Type of message (B1_Z1, B1_Z2, B1_Z2A, etc.)
             context: Context dictionary with user info (name, timeslot, etc.)
             user_message: The user's last message (if any)
+            conversation_history: List of previous messages [{"role": "user"/"assistant", "content": "..."}]
 
         Returns:
             Generated response text
         """
         try:
             # Get the system prompt and user prompt based on message type
-            system_prompt = self._get_system_prompt()
+            system_prompt = self._get_system_prompt(context)
             user_prompt = self._build_user_prompt(message_type, context, user_message)
+
+            # Build messages with conversation history
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Add conversation history if available (last 5 messages for context)
+            if conversation_history:
+                messages.extend(conversation_history[-5:])
+
+            # Add current prompt
+            messages.append({"role": "user", "content": user_prompt})
 
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=0.7,
                 max_tokens=300
             )
@@ -59,9 +68,16 @@ class OpenAIService:
             # Fallback to template if OpenAI fails
             return self._get_fallback_template(message_type, context)
 
-    def _get_system_prompt(self) -> str:
+    def _get_system_prompt(self, context: Dict = None) -> str:
         """Get the system prompt that defines Ineke's personality"""
-        return """You are Ineke from InnerJoy, a warm and uplifting meditation facilitator.
+        contact_info = ""
+        if context:
+            name = context.get('name', '')
+            current_step = context.get('current_step', '')
+            if name and name != 'there':
+                contact_info = f"\n\nCurrent conversation:\n- User's name: {name}\n- Current step: {current_step}"
+
+        return f"""You are Ineke from InnerJoy, a warm and uplifting meditation facilitator.{contact_info}
 
 Your personality:
 - Warm, friendly, and encouraging
