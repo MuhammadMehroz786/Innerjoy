@@ -12,6 +12,7 @@ import pytz
 from config import Config
 from services.respond_api import RespondAPI
 from services.google_sheets import GoogleSheetsService
+from services.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,17 @@ class MessageHandler:
         except:
             self.sheets = None
             logger.warning("Google Sheets not available - will skip sheet operations")
+
+        # Initialize OpenAI service for natural responses
+        try:
+            self.openai = OpenAIService()
+            self.use_openai = True
+            logger.info("OpenAI service initialized - using AI-generated responses")
+        except:
+            self.openai = None
+            self.use_openai = False
+            logger.warning("OpenAI not available - using template responses")
+
         self.templates = Config.get_message_templates()
         self.timezone = pytz.timezone(Config.TIMEZONE)
         self.channel_id = None  # Store channel ID from webhook
@@ -346,7 +358,31 @@ class MessageHandler:
 
     # ==================== TREE 1 FLOW - MESSAGE SENDING ====================
 
-    def _send_b1_z1(self, contact_identifier: str, contact_source: str = None):
+    def _generate_message(self, message_type: str, context: Dict, user_message: str = None) -> str:
+        """
+        Generate a message using OpenAI or fallback to templates
+
+        Args:
+            message_type: Type of message (B1_Z1, B1_Z2, etc.)
+            context: Context dictionary with user info
+            user_message: The user's last message (if any)
+
+        Returns:
+            Generated message text
+        """
+        if self.use_openai and self.openai:
+            try:
+                return self.openai.generate_response(message_type, context, user_message)
+            except Exception as e:
+                logger.warning(f"OpenAI generation failed, using template: {e}")
+
+        # Fallback to templates
+        if message_type in self.templates:
+            return self.templates[message_type].format(**context)
+
+        return "Sorry, I'm having trouble right now. Please try again! 🌸"
+
+    def _send_b1_z1(self, contact_identifier: str, contact_source: str = None, user_message: str = None):
         """
         Send B1 Z1 - Ask for name
         All contacts now use the same message (24h window for all)
@@ -354,10 +390,12 @@ class MessageHandler:
         Args:
             contact_identifier: Contact identifier
             contact_source: Contact source ('facebook_ads' or 'website')
+            user_message: The user's initial message
         """
         try:
-            # All contacts now get the same B1_Z1 message
-            message = self.templates['B1_Z1']
+            # Generate message using OpenAI or template
+            context = {'name': 'there'}
+            message = self._generate_message('B1_Z1', context, user_message)
             template_code = 'B1_Z1'
 
             self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
@@ -418,11 +456,13 @@ class MessageHandler:
             first_name: User's first name
         """
         try:
-            message = self.templates['B1_Z2'].format(
-                name=first_name,
-                zoom_link=Config.ZOOM_PREVIEW_LINK,
-                zoom_download_link=Config.ZOOM_DOWNLOAD_LINK
-            )
+            # Generate message using OpenAI or template
+            context = {
+                'name': first_name,
+                'zoom_link': Config.ZOOM_PREVIEW_LINK,
+                'zoom_download_link': Config.ZOOM_DOWNLOAD_LINK
+            }
+            message = self._generate_message('B1_Z2', context)
 
             self.api.send_message(contact_identifier, message, channel_id=self.channel_id)
             self._log_message(contact_identifier, message, 'outbound', 'B1_Z2')
