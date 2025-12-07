@@ -247,8 +247,8 @@ class MessageHandler:
             window_hours = Config.get_window_duration(contact_source)
             window_expires_at = now + timedelta(hours=window_hours)
 
-            # Try to extract name from first message
-            extracted_name = self._extract_first_name(message_text)
+            # Try to extract name from first message (confident matches only)
+            extracted_name = self._extract_first_name(message_text, confident_only=True)
             has_name = extracted_name and extracted_name != "there"
 
             if has_name:
@@ -312,7 +312,7 @@ class MessageHandler:
             logger.error(f"Error handling new contact: {e}", exc_info=True)
             return False
 
-    def _extract_first_name(self, message_text: str) -> str:
+    def _extract_first_name(self, message_text: str, confident_only: bool = False) -> str:
         """
         Extract first name from message text using AI or simple parsing
 
@@ -363,12 +363,20 @@ class MessageHandler:
                         logger.info(f"Pattern matched: '{pattern.strip()}' → {first_name}")
                         return first_name
 
-        # Default: Take first word
-        words = message_text.strip().split()
-        if words:
-            first_name = words[0].strip().capitalize()
-            if any(c.isalpha() for c in first_name):
-                return first_name
+        # Default: Take first word (only if not confident_only mode)
+        if not confident_only:
+            # Common greetings that should NOT be treated as names
+            common_greetings = ['hey', 'hi', 'hello', 'hola', 'greetings', 'good', 'morning',
+                               'afternoon', 'evening', 'yo', 'sup', 'whatsup', 'wassup']
+
+            words = message_text.strip().split()
+            if words:
+                first_word = words[0].strip().lower()
+                # Don't treat common greetings as names
+                if first_word not in common_greetings:
+                    first_name = words[0].strip().capitalize()
+                    if any(c.isalpha() for c in first_name):
+                        return first_name
 
         return "there"  # Default if can't extract
 
