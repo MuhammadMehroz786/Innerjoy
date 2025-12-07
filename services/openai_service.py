@@ -209,3 +209,59 @@ A = 15:30, B = 19:30, C = 20:00, D = 20:30, E = 21:00
             return templates[message_type].format(**context)
 
         return "Sorry, I'm having trouble right now. Please try again! 🌸"
+
+    def extract_name(self, message_text: str) -> Optional[str]:
+        """
+        Extract a person's name from their message using AI
+
+        Args:
+            message_text: User's message
+
+        Returns:
+            Extracted name or None if not found
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are a name extraction assistant. Extract the person's first name from their message.
+
+Rules:
+- Extract ONLY the first name (not full name)
+- Return just the name, nothing else
+- Capitalize it properly
+- If no clear name is found, return "NONE"
+
+Examples:
+"I'm Mehroz" → Mehroz
+"I am Sarah" → Sarah
+"My name is John" → John
+"Call me Alex" → Alex
+"Hi, this is Mike" → Mike
+"hey" → NONE
+"hello" → NONE"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f'Extract the first name from: "{message_text}"'
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=20
+            )
+
+            extracted = response.choices[0].message.content.strip()
+
+            if extracted and extracted != "NONE" and len(extracted) > 0:
+                # Validate it looks like a name (has letters)
+                if any(c.isalpha() for c in extracted):
+                    logger.info(f"OpenAI extracted name '{extracted}' from '{message_text}'")
+                    return extracted.capitalize()
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"OpenAI name extraction failed: {e}")
+            return None

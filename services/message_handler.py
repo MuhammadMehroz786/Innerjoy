@@ -247,30 +247,66 @@ class MessageHandler:
             window_hours = Config.get_window_duration(contact_source)
             window_expires_at = now + timedelta(hours=window_hours)
 
-            # Add to sheets with placeholder name
-            # We'll get their actual name in the next message
-            self._safe_sheets_operation(
-                lambda: self.sheets.add_contact({
-                    'contact_id': contact_identifier,
-                    'phone': phone,
-                    'first_name': 'Pending',  # Placeholder until they provide name
-                    'current_tree': 'Tree1',
-                    'current_step': 'B1_Z1',  # Waiting for name
-                    'registration_time': now.isoformat(),
-                    'last_inbound_msg_time': now.isoformat(),
-                    'window_expires_at': window_expires_at.isoformat(),
-                    'contact_source': contact_source
-                }) if self.sheets else None
-            )
+            # Try to extract name from first message
+            extracted_name = self._extract_first_name(message_text)
+            has_name = extracted_name and extracted_name != "there"
 
-            # Log their first message
-            self._log_message(contact_identifier, message_text, 'inbound', 'FIRST_CONTACT')
+            if has_name:
+                # Name found in first message! Skip B1_Z1 and go straight to B1_Z2
+                logger.info(f"✨ Name detected in first message: {extracted_name}")
 
-            # Send B1 Z1 - Ask for name (using appropriate template based on source)
-            self._send_b1_z1(contact_identifier, contact_source)
+                # Add to sheets with extracted name
+                self._safe_sheets_operation(
+                    lambda: self.sheets.add_contact({
+                        'contact_id': contact_identifier,
+                        'phone': phone,
+                        'first_name': extracted_name,
+                        'current_tree': 'Tree1',
+                        'current_step': 'B1_Z2',  # Skip to timeslot selection
+                        'registration_time': now.isoformat(),
+                        'last_inbound_msg_time': now.isoformat(),
+                        'window_expires_at': window_expires_at.isoformat(),
+                        'contact_source': contact_source
+                    }) if self.sheets else None
+                )
 
-            logger.info(f"New contact {contact_identifier} added ({contact_source}, {window_hours}h window), sent B1_Z1")
-            return True
+                # Log their first message
+                self._log_message(contact_identifier, message_text, 'inbound', 'FIRST_CONTACT_WITH_NAME')
+
+                # Send B1 Z2 directly - Zoom link + ask for timeslot
+                self._send_b1_z2(contact_identifier, extracted_name)
+
+                # Schedule Tree2 fallback
+                self._schedule_tree2_fallback(contact_identifier, hours=2)
+
+                logger.info(f"Smart flow: {contact_identifier} → sent B1_Z2 directly (name: {extracted_name})")
+                return True
+
+            else:
+                # No name in first message - use normal flow
+                # Add to sheets with placeholder name
+                self._safe_sheets_operation(
+                    lambda: self.sheets.add_contact({
+                        'contact_id': contact_identifier,
+                        'phone': phone,
+                        'first_name': 'Pending',  # Placeholder until they provide name
+                        'current_tree': 'Tree1',
+                        'current_step': 'B1_Z1',  # Waiting for name
+                        'registration_time': now.isoformat(),
+                        'last_inbound_msg_time': now.isoformat(),
+                        'window_expires_at': window_expires_at.isoformat(),
+                        'contact_source': contact_source
+                    }) if self.sheets else None
+                )
+
+                # Log their first message
+                self._log_message(contact_identifier, message_text, 'inbound', 'FIRST_CONTACT')
+
+                # Send B1 Z1 - Ask for name
+                self._send_b1_z1(contact_identifier, contact_source, message_text)
+
+                logger.info(f"New contact {contact_identifier} added ({contact_source}, {window_hours}h window), sent B1_Z1")
+                return True
 
         except Exception as e:
             logger.error(f"Error handling new contact: {e}", exc_info=True)
@@ -278,7 +314,7 @@ class MessageHandler:
 
     def _extract_first_name(self, message_text: str) -> str:
         """
-        Extract first name from message text
+        Extract first name from message text using AI or simple parsing
 
         Args:
             message_text: Message from user
@@ -286,11 +322,44 @@ class MessageHandler:
         Returns:
             First name (capitalized)
         """
-        # Take first word and capitalize
+        # Try OpenAI extraction first (handles "I'm X", "My name is X", etc.)
+        if self.use_openai and self.openai:
+            try:
+                extracted_name = self.openai.extract_name(message_text)
+                if extracted_name:
+                    logger.info(f"✨ AI extracted name: {extracted_name}")
+                    return extracted_name
+            except Exception as e:
+                logger.debug(f"OpenAI name extraction failed, using fallback: {e}")
+
+        # Fallback: Simple extraction with pattern matching
+        text = message_text.strip().lower()
+
+        # Handle common patterns
+        patterns = [
+            ("i'm ", "i'm "),
+            ("i am ", "i am "),
+            ("my name is ", "my name is "),
+            ("call me ", "call me "),
+            ("this is ", "this is "),
+            ("im ", "im "),
+        ]
+
+        for pattern, _ in patterns:
+            if text.startswith(pattern):
+                # Extract text after the pattern
+                name_part = message_text[len(pattern):].strip()
+                words = name_part.split()
+                if words:
+                    first_name = words[0].strip().capitalize()
+                    if any(c.isalpha() for c in first_name):
+                        logger.info(f"Pattern matched: '{pattern}' → {first_name}")
+                        return first_name
+
+        # Default: Take first word
         words = message_text.strip().split()
         if words:
             first_name = words[0].strip().capitalize()
-            # Validate it's a real name (not just emoji)
             if any(c.isalpha() for c in first_name):
                 return first_name
 
